@@ -169,55 +169,106 @@ module Two =
 let readInput day =
     System.IO.File.ReadAllLines(sprintf "./day-%s-input.txt" day)
 
-// [| "467..114.."
-//    "...*......"
-//    "..35..633."
-//    "......#..."
-//    "617*......"
-//    ".....+.58."
-//    "..592....."
-//    "......755."
-//    "...$.*...."
-//    ".664.598.." |]
+    // [| "467..114.."
+    //    "...*......"
+    //    "..35..633."
+    //    "......#..."
+    //    "617*......"
+    //    ".....+.58."
+    //    "..592....."
+    //    "......755."
+    //    "...$.*...."
+    //    ".664.598.." |]
 
 module Three =
+    type Coords = int * int
+
+    type Number =
+        { coords: Coords
+          length: int
+          value: int }
+
+    module Number =
+        let value ({ value = value }) = value
 
     let grid lines =
         let lines = Array.map (fun (line: string) -> line.ToCharArray()) lines
         let initializer x y = Array.get (Array.get lines y) x
         Array2D.init (lines |> Array.map Array.length |> Array.max) (Array.length lines) initializer
 
-    let one lines =
+    let coords { coords = (x, y); length = length } =
+        seq { for x in x .. x + length - 1 -> x, y }
+
+    let surroundingCoords ({ coords = (x, y); length = length } as number) grid =
+        seq {
+            for y in y - 1 .. y + 1 do
+                if y >= 0 && y < Array2D.length2 grid then
+                    for x in x - 1 .. x + length do
+                        if x >= 0 && x < Array2D.length1 grid then
+                            x, y
+        }
+        |> Seq.except (coords number)
+
+    let numbers lines =
         let digits = new System.Text.RegularExpressions.Regex("\d+")
 
-        let grid = grid lines
+        seq {
+            for (y, line) in Array.indexed lines do
+                for m in digits.Matches(line) do
+                    { coords = m.Index, y
+                      length = m.Length
+                      value = System.Convert.ToInt32(m.Value) }
+        }
 
-        let surrounding y x length =
-            seq {
-                for y in y - 1 .. y + 1 do
-                    if y >= 0 && y < Array2D.length2 grid then
-                        for x in x - 1 .. x + length do
-                            if x >= 0 && x < Array2D.length1 grid then
-                                x, y
-            }
-            |> Seq.except (seq { for x in x .. x + length - 1 -> x, y })
+
+    let one lines =
+        let grid = grid lines
+        let numbers = numbers lines
+
+        let surrounding number =
+            surroundingCoords number grid
             |> Seq.map (fun (x, y) -> Array2D.get grid x y)
 
         let containsSymbol = Seq.filter ((<>) '.') >> Seq.isEmpty >> not
 
-        let map i line =
-            seq {
-                for m in digits.Matches(line) do
-                    if containsSymbol <| surrounding i m.Index m.Length then
-                        System.Convert.ToInt32(m.Value)
-            }
-
-
-        Seq.concat <| Array.mapi map lines
+        numbers
+        |> Seq.filter (surrounding >> containsSymbol)
+        |> Seq.map Number.value
         |> Seq.sum
         |> printfn "%A"
 
-    let two lines = ()
+    let two lines =
+        let grid = grid lines
+        let numbers = numbers lines
+
+        let gears =
+            seq {
+                for x in 0 .. Array2D.length1 grid - 1 do
+                    for y in 0 .. Array2D.length2 grid - 1 do
+                        if Array2D.get grid x y = '*' then
+                            x, y
+            }
+
+        let choose gear =
+            let filter number =
+                surroundingCoords number grid
+                |> Seq.contains gear
+
+            let touching = Seq.filter filter numbers
+
+            if Seq.length touching = 2 then
+                Some touching
+            else
+                None
+
+        let gearRatio: Number seq -> int =
+            let fold acc ({ value = value }) = acc * value
+            Seq.fold fold 1
+
+        gears
+        |> Seq.choose choose
+        |> Seq.sumBy gearRatio
+        |> printfn "%A"
 
 
 [<EntryPoint>]
@@ -228,7 +279,7 @@ let main args =
     | [| "2"; "1" |] -> "2" |> readInput |> Two.one
     | [| "2"; "2" |] -> "2" |> readInput |> Two.two
     | [| "3"; "1" |] -> "3" |> readInput |> Three.one
-    | [| "3"; "2" |] -> "3" |> readInput |> Three.two
+    | [| "3"; "2" |] -> "3" |> readInput |> Three.two // 87287096
     | _ -> printfn "which puzzle?"
 
     0
