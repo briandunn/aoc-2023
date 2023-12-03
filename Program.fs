@@ -145,18 +145,19 @@ module Two =
         >> printfn "%A"
 
     let two =
-        let maxHand (a: Hand): Hand -> Hand =
+        let maxHand (a: Hand) : Hand -> Hand =
             let fold (acc: Hand) (color, count) : Hand =
                 let newMax =
                     match Map.tryFind color acc with
                     | Some previousMax when count > previousMax -> count
                     | Some previousMax -> previousMax
                     | None -> count
+
                 Map.add color newMax acc
+
             List.fold fold a << Map.toList
 
-        let fewest ({ hands = hands }: Game) : Hand =
-            List.fold maxHand Map.empty hands
+        let fewest ({ hands = hands }: Game) : Hand = List.fold maxHand Map.empty hands
 
         let power: Hand -> int = Map.values >> Seq.fold (*) 1
 
@@ -168,6 +169,56 @@ module Two =
 let readInput day =
     System.IO.File.ReadAllLines(sprintf "./day-%s-input.txt" day)
 
+// [| "467..114.."
+//    "...*......"
+//    "..35..633."
+//    "......#..."
+//    "617*......"
+//    ".....+.58."
+//    "..592....."
+//    "......755."
+//    "...$.*...."
+//    ".664.598.." |]
+
+module Three =
+
+    let grid lines =
+        let lines = Array.map (fun (line: string) -> line.ToCharArray()) lines
+        let initializer x y = Array.get (Array.get lines y) x
+        Array2D.init (lines |> Array.map Array.length |> Array.max) (Array.length lines) initializer
+
+    let one lines =
+        let digits = new System.Text.RegularExpressions.Regex("\d+")
+
+        let grid = grid lines
+
+        let surrounding y x length =
+            seq {
+                for y in y - 1 .. y + 1 do
+                    if y >= 0 && y < Array2D.length2 grid then
+                        for x in x - 1 .. x + length do
+                            if x >= 0 && x < Array2D.length1 grid then
+                                x, y
+            }
+            |> Seq.except (seq { for x in x .. x + length - 1 -> x, y })
+            |> Seq.map (fun (x, y) -> Array2D.get grid x y)
+
+        let containsSymbol = Seq.filter ((<>) '.') >> Seq.isEmpty >> not
+
+        let map i line =
+            seq {
+                for m in digits.Matches(line) do
+                    if containsSymbol <| surrounding i m.Index m.Length then
+                        System.Convert.ToInt32(m.Value)
+            }
+
+
+        Seq.concat <| Array.mapi map lines
+        |> Seq.sum
+        |> printfn "%A"
+
+    let two lines = ()
+
 
 [<EntryPoint>]
 let main args =
@@ -176,6 +227,8 @@ let main args =
     | [| "1"; "2" |] -> "1" |> readInput |> One.two
     | [| "2"; "1" |] -> "2" |> readInput |> Two.one
     | [| "2"; "2" |] -> "2" |> readInput |> Two.two
+    | [| "3"; "1" |] -> "3" |> readInput |> Three.one
+    | [| "3"; "2" |] -> "3" |> readInput |> Three.two
     | _ -> printfn "which puzzle?"
 
     0
