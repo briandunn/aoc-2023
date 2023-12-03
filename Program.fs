@@ -67,6 +67,9 @@ module One =
 
         lines |> Array.fold fold 0 |> printfn "%d"
 
+module Tuple =
+    let first (a, b) = a
+
 module Two =
     type Color =
         | Red
@@ -112,13 +115,14 @@ module Two =
                       hands = parseHands hands.Value }
             | _ -> None
 
-    let one lines =
+    let games = Array.choose parseGame >> Array.toList
+
+    let one =
         let maximums =
             Map.ofList [ Red, 12
                          Green, 13
                          Blue, 14 ]
 
-        let games = lines |> Array.choose parseGame |> Array.toList
 
         let handIsPossible (hand: Hand) : bool =
             let forall color =
@@ -126,7 +130,7 @@ module Two =
                 |> List.choose (Map.tryFind color)
                 |> function
                     | [ g; m ] -> g <= m
-                    | [_m] -> true
+                    | [ _m ] -> true
                     | _ -> false
 
             [ Red; Green; Blue ] |> List.forall forall
@@ -136,13 +140,34 @@ module Two =
         let sumBy ({ id = id }) = id
 
         games
-        |> List.filter filter
-        |> List.sumBy sumBy
-        |> printfn "%A"
+        >> List.filter filter
+        >> List.sumBy sumBy
+        >> printfn "%A"
+
+    let two =
+        let maxHand (a: Hand): Hand -> Hand =
+            let fold (acc: Hand) (color, count) : Hand =
+                let newMax =
+                    match Map.tryFind color acc with
+                    | Some previousMax when count > previousMax -> count
+                    | Some previousMax -> previousMax
+                    | None -> count
+                Map.add color newMax acc
+            List.fold fold a << Map.toList
+
+        let fewest ({ hands = hands }: Game) : Hand =
+            List.fold maxHand Map.empty hands
+
+        let power: Hand -> int = Map.values >> Seq.fold (*) 1
+
+        games
+        >> List.map (fewest >> power)
+        >> List.sum
+        >> printfn "%A"
 
 let readInput day =
-
     System.IO.File.ReadAllLines(sprintf "./day-%s-input.txt" day)
+
 
 [<EntryPoint>]
 let main args =
@@ -150,6 +175,7 @@ let main args =
     | [| "1"; "1" |] -> "1" |> readInput |> One.one
     | [| "1"; "2" |] -> "1" |> readInput |> One.two
     | [| "2"; "1" |] -> "2" |> readInput |> Two.one
+    | [| "2"; "2" |] -> "2" |> readInput |> Two.two
     | _ -> printfn "which puzzle?"
 
     0
