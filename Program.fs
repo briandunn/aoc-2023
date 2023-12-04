@@ -282,24 +282,46 @@ module Four =
                   winning = toSet winning }
         | _ -> None
 
+    let matchCount ({ have = have; winning = winning }) =
+        winning |> Set.intersect have |> Seq.length
+
     let one =
-        let score ({ have = have; winning = winning }) =
-            let matches = winning |> Set.intersect have |> Seq.length
-            pown 2 (matches - 1)
+        let score card = pown 2 ((matchCount card) - 1)
 
         Seq.choose parseCard
         >> Seq.map score
         >> Seq.sum
         >> printfn "%A"
 
-    let two lines =
-        ()
+    let two =
+        let score card = matchCount card, 1
+        let copies (_score, copies) = copies
+
+        let rec loop =
+            function
+            | (score, copies) as head :: tail ->
+                let inc (score, c) = score, c + copies
+                let take = tail |> List.length |> min score
+
+                head
+                :: loop (
+                    (tail |> List.take take |> List.map inc)
+                    @ (List.skip take tail)
+                )
+
+            | [] -> []
+
+        Seq.choose parseCard
+        >> Seq.map score
+        >> Seq.toList
+        >> loop
+        >> List.sumBy copies
+        >> printfn "%A"
 
 [<EntryPoint>]
 let main args =
     let readInput day =
         System.IO.File.ReadAllLines(sprintf "./day-%s-input.txt" day)
-
 
     match args with
     | [| "1"; "1" |] -> "1" |> readInput |> One.one
@@ -309,7 +331,7 @@ let main args =
     | [| "3"; "1" |] -> "3" |> readInput |> Three.one
     | [| "3"; "2" |] -> "3" |> readInput |> Three.two // 87287096
     | [| "4"; "1" |] -> "4" |> readInput |> Four.one
-    | [| "4"; "2" |] -> "4" |> readInput |> Four.two
+    | [| "4"; "2" |] -> "4" |> readInput |> Four.two // 6189740
     | _ -> printfn "which puzzle?"
 
     0
