@@ -166,20 +166,6 @@ module Two =
         >> List.sum
         >> printfn "%A"
 
-let readInput day =
-    System.IO.File.ReadAllLines(sprintf "./day-%s-input.txt" day)
-
-    // [| "467..114.."
-    //    "...*......"
-    //    "..35..633."
-    //    "......#..."
-    //    "617*......"
-    //    ".....+.58."
-    //    "..592....."
-    //    "......755."
-    //    "...$.*...."
-    //    ".664.598.." |]
-
 module Three =
     type Coords = int * int
 
@@ -231,11 +217,13 @@ module Three =
 
         let containsSymbol = Seq.filter ((<>) '.') >> Seq.isEmpty >> not
 
-        numbers
-        |> Seq.filter (surrounding >> containsSymbol)
-        |> Seq.map Number.value
-        |> Seq.sum
-        |> printfn "%A"
+        let fold acc number =
+            if number |> surrounding |> containsSymbol then
+                acc + number.value
+            else
+                acc
+
+        numbers |> Seq.fold fold 0 |> printfn "%A"
 
     let two lines =
         let grid = grid lines
@@ -245,14 +233,12 @@ module Three =
             seq {
                 for x in 0 .. Array2D.length1 grid - 1 do
                     for y in 0 .. Array2D.length2 grid - 1 do
-                        if Array2D.get grid x y = '*' then
-                            x, y
+                        if Array2D.get grid x y = '*' then x, y
             }
 
         let choose gear =
             let filter number =
-                surroundingCoords number grid
-                |> Seq.contains gear
+                surroundingCoords number grid |> Seq.contains gear
 
             let touching = Seq.filter filter numbers
 
@@ -271,8 +257,50 @@ module Three =
         |> printfn "%A"
 
 
+module Four =
+    type Card =
+        { id: int
+          have: int Set
+          winning: int Set }
+
+    let cardRe =
+        new System.Text.RegularExpressions.Regex("^Card\s+(\d+):\s+([^\|]+)\|(.*)$")
+
+    let numRe = new System.Text.RegularExpressions.Regex("\d+")
+
+    let parseCard line =
+        let toSet (m: System.Text.RegularExpressions.Group) =
+            let map (v: System.Text.RegularExpressions.Match) = System.Convert.ToInt32(v.Value)
+
+            numRe.Matches(m.Value) |> Seq.map map |> Set.ofSeq
+
+        match cardRe.Match(line).Groups |> List.ofSeq with
+        | [ _; id; winning; have ] ->
+            Some
+                { id = System.Convert.ToInt32(id.Value)
+                  have = toSet have
+                  winning = toSet winning }
+        | _ -> None
+
+    let one =
+        let score ({ have = have; winning = winning }) =
+            let matches = winning |> Set.intersect have |> Seq.length
+            pown 2 (matches - 1)
+
+        Seq.choose parseCard
+        >> Seq.map score
+        >> Seq.sum
+        >> printfn "%A"
+
+    let two lines =
+        ()
+
 [<EntryPoint>]
 let main args =
+    let readInput day =
+        System.IO.File.ReadAllLines(sprintf "./day-%s-input.txt" day)
+
+
     match args with
     | [| "1"; "1" |] -> "1" |> readInput |> One.one
     | [| "1"; "2" |] -> "1" |> readInput |> One.two
@@ -280,6 +308,8 @@ let main args =
     | [| "2"; "2" |] -> "2" |> readInput |> Two.two
     | [| "3"; "1" |] -> "3" |> readInput |> Three.one
     | [| "3"; "2" |] -> "3" |> readInput |> Three.two // 87287096
+    | [| "4"; "1" |] -> "4" |> readInput |> Four.one
+    | [| "4"; "2" |] -> "4" |> readInput |> Four.two
     | _ -> printfn "which puzzle?"
 
     0
