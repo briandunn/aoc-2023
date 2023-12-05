@@ -256,6 +256,13 @@ module Three =
         |> Seq.sumBy gearRatio
         |> printfn "%A"
 
+module String =
+    let numRe = new System.Text.RegularExpressions.Regex("\d+")
+
+    let parseNumbers (line: string) : int seq =
+        let map (v: System.Text.RegularExpressions.Match) = System.Convert.ToInt32(v.Value)
+
+        Seq.map map <| numRe.Matches(line)
 
 module Four =
     type Card =
@@ -266,13 +273,9 @@ module Four =
     let cardRe =
         new System.Text.RegularExpressions.Regex("^Card\s+(\d+):\s+([^\|]+)\|(.*)$")
 
-    let numRe = new System.Text.RegularExpressions.Regex("\d+")
-
     let parseCard line =
         let toSet (m: System.Text.RegularExpressions.Group) =
-            let map (v: System.Text.RegularExpressions.Match) = System.Convert.ToInt32(v.Value)
-
-            numRe.Matches(m.Value) |> Seq.map map |> Set.ofSeq
+            m.Value |> String.parseNumbers |> Set.ofSeq
 
         match cardRe.Match(line).Groups |> List.ofSeq with
         | [ _; id; winning; have ] ->
@@ -289,8 +292,7 @@ module Four =
         let score card = pown 2 ((matchCount card) - 1)
 
         Seq.choose parseCard
-        >> Seq.map score
-        >> Seq.sum
+        >> Seq.sumBy score
         >> printfn "%A"
 
     let two =
@@ -299,17 +301,11 @@ module Four =
 
         let rec loop =
             function
+            | [] -> []
             | (score, copies) as head :: tail ->
                 let inc (score, c) = score, c + copies
-                let take = tail |> List.length |> min score
-
-                head
-                :: loop (
-                    (tail |> List.take take |> List.map inc)
-                    @ (List.skip take tail)
-                )
-
-            | [] -> []
+                let toDup, tail = List.splitAt (tail |> List.length |> min score) tail
+                head :: loop ((List.map inc toDup) @ tail)
 
         Seq.choose parseCard
         >> Seq.map score
@@ -318,10 +314,79 @@ module Four =
         >> List.sumBy copies
         >> printfn "%A"
 
+module Five =
+    open System.Text.RegularExpressions
+
+    type Range =
+        { sourceStart: int
+          destStart: int
+          length: int }
+
+    type RangeMap =
+        { source: string
+          dest: string
+          ranges: Range list }
+
+    type Almanac =
+        { inputs: int list
+          maps: RangeMap list }
+
+    let parse: string seq -> Almanac =
+        let rec parseRanges =
+            function
+            | head :: rest ->
+                match head |> String.parseNumbers |> Seq.toList with
+                | [ sourceStart; destStart; length ] ->
+                    let ranges, rest = parseRanges rest
+
+                    { sourceStart = sourceStart
+                      destStart = destStart
+                      length = length }
+                    :: ranges,
+                    rest
+                | _ -> [], head :: rest
+            | [] -> [], []
+
+        let rec parseMaps: string list -> RangeMap list * string list =
+            let headerRe = Regex("^([^\-]+)\-to\-(\S+) map:$")
+
+            function
+            | "" :: rest -> parseMaps rest
+            | header :: rest when headerRe.IsMatch header ->
+                headerRe.Match(header).Groups
+                |> Seq.toList
+                |> function
+                    | [ _; source; dest ] ->
+                        let ranges, rest = parseRanges rest
+                        let maps, rest = parseMaps rest
+
+                        { source = source.Value
+                          dest = dest.Value
+                          ranges = ranges }
+                        :: maps,
+                        rest
+                    | _ -> [], []
+            | _ ->
+                [], []
+
+
+        Seq.toList
+        >> function
+            | inputs :: rest ->
+                let maps, _ = parseMaps rest
+
+                { inputs = inputs |> String.parseNumbers |> Seq.toList
+                  maps = maps }
+            | _ -> { inputs = []; maps = [] }
+
+
+    let one = parse >> printfn "%A"
+
+
 [<EntryPoint>]
 let main args =
     let readInput day =
-        System.IO.File.ReadAllLines(sprintf "./day-%s-input.txt" day)
+        System.IO.File.ReadAllLines(sprintf "./day-%s-test.txt" day)
 
     match args with
     | [| "1"; "1" |] -> "1" |> readInput |> One.one
@@ -332,6 +397,7 @@ let main args =
     | [| "3"; "2" |] -> "3" |> readInput |> Three.two // 87287096
     | [| "4"; "1" |] -> "4" |> readInput |> Four.one
     | [| "4"; "2" |] -> "4" |> readInput |> Four.two // 6189740
+    | [| "5"; "1" |] -> "5" |> readInput |> Five.one
     | _ -> printfn "which puzzle?"
 
     0
