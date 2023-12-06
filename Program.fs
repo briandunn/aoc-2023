@@ -68,7 +68,8 @@ module One =
         lines |> Array.fold fold 0 |> printfn "%d"
 
 module Tuple =
-    let first (a, b) = a
+    let first (a, _b) = a
+    let second (_a, b) = b
 
 module Two =
     type Color =
@@ -257,18 +258,28 @@ module Three =
         |> printfn "%A"
 
 module String =
-    let numRe = new System.Text.RegularExpressions.Regex("\d+")
+    open System
+    open System.Text.RegularExpressions
 
-    let parseNumbers (line: string) : int seq =
-        let map (v: System.Text.RegularExpressions.Match) = System.Convert.ToInt32(v.Value)
+    let numRe = new Regex("\d+")
+
+    let parseNumbers (line: string) : int64 seq =
+        let map (v: Match) =
+            try
+                Convert.ToInt64(v.Value)
+            with
+            | :? OverflowException ->
+                printfn "overflow: %s" v.Value
+                0
+
 
         Seq.map map <| numRe.Matches(line)
 
 module Four =
     type Card =
         { id: int
-          have: int Set
-          winning: int Set }
+          have: int64 Set
+          winning: int64 Set }
 
     let cardRe =
         new System.Text.RegularExpressions.Regex("^Card\s+(\d+):\s+([^\|]+)\|(.*)$")
@@ -318,9 +329,9 @@ module Five =
     open System.Text.RegularExpressions
 
     type Range =
-        { sourceStart: int
-          destStart: int
-          length: int }
+        { sourceStart: int64
+          destStart: int64
+          length: int64 }
 
     type RangeMap =
         { source: string
@@ -328,15 +339,15 @@ module Five =
           ranges: Range list }
 
     type Almanac =
-        { inputs: int list
-          maps: RangeMap list }
+        { inputs: int64 list
+          maps: Map<string, RangeMap> }
 
     let parse: string seq -> Almanac =
         let rec parseRanges =
             function
             | head :: rest ->
                 match head |> String.parseNumbers |> Seq.toList with
-                | [ sourceStart; destStart; length ] ->
+                | [ destStart; sourceStart; length ] ->
                     let ranges, rest = parseRanges rest
 
                     { sourceStart = sourceStart
@@ -366,8 +377,7 @@ module Five =
                         :: maps,
                         rest
                     | _ -> [], []
-            | _ ->
-                [], []
+            | _ -> [], []
 
 
         Seq.toList
@@ -376,17 +386,79 @@ module Five =
                 let maps, _ = parseMaps rest
 
                 { inputs = inputs |> String.parseNumbers |> Seq.toList
-                  maps = maps }
-            | _ -> { inputs = []; maps = [] }
+                  maps = Map.ofList [ for map in maps -> map.source, map ] }
+            | _ -> { inputs = []; maps = Map.empty }
+
+    let resolve maps =
+
+        let resolveRange
+            input
+            { sourceStart = sourceStart
+              destStart = destStart
+              length = length }
+            =
+            if input >= sourceStart
+               && input < (sourceStart + length) then
+                Some(destStart + (input - sourceStart))
+            else
+                None
+
+        let resolveMap input { dest = dest; ranges = ranges } =
+            match ranges |> List.choose (resolveRange input) with
+            | [] -> Some(dest, input)
+            | [ mapped ] -> Some(dest, mapped)
+            | x ->
+                printfn "%A" (x, dest)
+                None
 
 
-    let one = parse >> printfn "%A"
+        let rec resolveInput (kind: string) input =
+            Map.tryFind kind maps
+            |> Option.bind (resolveMap input)
+            |> function
+                | Some (dest, mapped) -> resolveInput dest mapped
+                | None -> (kind, input)
+
+        List.map (resolveInput "seed")
+
+    let one lines =
+        let { inputs = inputs; maps = maps } = parse lines
+
+        inputs
+        |> resolve maps
+        |> List.minBy Tuple.second
+        |> printfn "%A"
+
+    let two lines =
+        let { inputs = inputs; maps = maps } = parse lines
+
+        let rec expand =
+            function
+            | start :: length :: rest -> (start, length) :: expand rest
+            | _ -> []
+
+        let ranges = expand inputs
+
+        // can't bruit force this one
+        // find the boundary conditions -
+        // for each map range that the input range overlaps
+        // find the overlap start and stop
+        // just feed those through
+
+
+        ranges |> printfn "%A"
+
+// inputs
+// |> expand
+// |> resolve maps
+// |> List.minBy Tuple.second
+// |> printfn "%A"
 
 
 [<EntryPoint>]
 let main args =
     let readInput day =
-        System.IO.File.ReadAllLines(sprintf "./day-%s-test.txt" day)
+        System.IO.File.ReadAllLines(sprintf "./day-%s-input.txt" day)
 
     match args with
     | [| "1"; "1" |] -> "1" |> readInput |> One.one
@@ -398,6 +470,7 @@ let main args =
     | [| "4"; "1" |] -> "4" |> readInput |> Four.one
     | [| "4"; "2" |] -> "4" |> readInput |> Four.two // 6189740
     | [| "5"; "1" |] -> "5" |> readInput |> Five.one
+    | [| "5"; "2" |] -> "5" |> readInput |> Five.two
     | _ -> printfn "which puzzle?"
 
     0
