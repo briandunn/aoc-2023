@@ -16,7 +16,7 @@ module One =
             sum
             + System.Convert.ToInt32(String.concat "" digits)
 
-        Seq.fold fold 0 >> printfn "%d"
+        Seq.fold fold 0
 
     let two =
         let lastIndexOf (sub: string) (line: string) = line.LastIndexOf(sub)
@@ -65,7 +65,7 @@ module One =
 
             sum + value
 
-        Seq.fold fold 0 >> printfn "%d"
+        Seq.fold fold 0
 
 module Two =
     type Color =
@@ -138,7 +138,6 @@ module Two =
         games
         >> List.filter filter
         >> List.sumBy sumBy
-        >> printfn "%A"
 
     let two =
         let maxHand (a: Hand) : Hand -> Hand =
@@ -160,7 +159,6 @@ module Two =
         games
         >> List.map (fewest >> power)
         >> List.sum
-        >> printfn "%A"
 
 module Three =
     type Coords = int * int
@@ -219,7 +217,7 @@ module Three =
             else
                 acc
 
-        numbers |> Seq.fold fold 0 |> printfn "%A"
+        numbers |> Seq.fold fold 0
 
     let two lines =
         let grid = grid lines
@@ -250,7 +248,6 @@ module Three =
         gears
         |> Seq.choose choose
         |> Seq.sumBy gearRatio
-        |> printfn "%A"
 
 module Four =
     type Card =
@@ -280,7 +277,6 @@ module Four =
 
         Seq.choose parseCard
         >> Seq.sumBy score
-        >> printfn "%A"
 
     let two =
         let score card = matchCount card, 1
@@ -299,7 +295,6 @@ module Four =
         >> Seq.toList
         >> loop
         >> List.sumBy copies
-        >> printfn "%A"
 
 [<EntryPoint>]
 let main args =
@@ -322,6 +317,7 @@ let main args =
                   5, 1, Five.one
                   5, 2, Five.two
                   6, 1, Six.one
+                  6, 2, Six.two
                   ] -> (day, puzzle), f
         }
         |> Map.ofSeq
