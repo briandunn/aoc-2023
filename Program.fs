@@ -101,15 +101,14 @@ module Two =
             |> Seq.map parseHand
             |> Seq.toList
 
-        let re = new System.Text.RegularExpressions.Regex("^Game\s+(\d+):\s+(.*)$")
-
-        re.Match(line).Groups
+        "^Game\s+(\d+):\s+(.*)$"
+        |> Regex.groups line
         |> Seq.toList
         |> function
             | [ _; gameId; hands ] ->
                 Some
-                    { id = System.Convert.ToInt32 gameId.Value
-                      hands = parseHands hands.Value }
+                    { id = (int) gameId
+                      hands = parseHands hands }
             | _ -> None
 
     let games = Seq.choose parseGame >> Seq.toList
@@ -259,9 +258,6 @@ module Four =
           have: int64 Set
           winning: int64 Set }
 
-    let cardRe =
-        new System.Text.RegularExpressions.Regex("^Card\s+(\d+):\s+([^\|]+)\|(.*)$")
-
     let parseCard line =
         let toSet = String.parseNumbers >> Set.ofSeq
 
@@ -308,8 +304,8 @@ module Four =
 [<EntryPoint>]
 let main args =
 
-    let readInput () =
-        Seq.initInfinite (fun _ -> stdin.ReadLine())
+    let readLines (stream: System.IO.TextReader) =
+        Seq.initInfinite (fun _ -> stream.ReadLine())
         |> Seq.takeWhile ((<>) null)
 
     let puzzles =
@@ -324,7 +320,9 @@ let main args =
                   4, 1, Four.one
                   4, 2, Four.two
                   5, 1, Five.one
-                  5, 2, Five.two ] -> (day, puzzle), f
+                  5, 2, Five.two
+                  6, 1, Six.one
+                  ] -> (day, puzzle), f
         }
         |> Map.ofSeq
 
@@ -336,9 +334,14 @@ let main args =
         | [ day; puzzle ] ->
             puzzles
             |> Map.tryFind (day, puzzle)
-            |> Option.iter (fun f -> f (readInput ()))
+            |> function
+            | Some f -> stdin |> readLines |> f |> printfn "%A"
+                        0
+            | None ->
+                printfn "No puzzle %d for day %d" puzzle day
+                1
 
-            0
+
         | _ ->
             printfn "Usage: dotnet run <day> <puzzle> < input.txt"
             1
