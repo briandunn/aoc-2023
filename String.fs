@@ -15,3 +15,9 @@ module String
 
 
       Seq.map map <| numRe.Matches(line)
+
+
+  let parseInts (line: string) : int seq =
+      let map (v: Match) = (int v.Value)
+
+      Seq.map map <| numRe.Matches(line)

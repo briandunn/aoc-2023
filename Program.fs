@@ -1,7 +1,7 @@
 ﻿// For more information see https://aka.ms/fsharp-console-apps
 
 module One =
-    let one lines =
+    let one =
 
         let re = System.Text.RegularExpressions.Regex("\d")
 
@@ -16,9 +16,9 @@ module One =
             sum
             + System.Convert.ToInt32(String.concat "" digits)
 
-        lines |> Array.fold fold 0 |> printfn "%d"
+        Seq.fold fold 0 >> printfn "%d"
 
-    let two lines =
+    let two =
         let lastIndexOf (sub: string) (line: string) = line.LastIndexOf(sub)
 
         let firstIndexOf (sub: string) (line: string) = line.IndexOf(sub)
@@ -65,7 +65,8 @@ module One =
 
             sum + value
 
-        lines |> Array.fold fold 0 |> printfn "%d"
+        Seq.fold fold 0 >> printfn "%d"
+
 module Two =
     type Color =
         | Red
@@ -111,7 +112,7 @@ module Two =
                       hands = parseHands hands.Value }
             | _ -> None
 
-    let games = Array.choose parseGame >> Array.toList
+    let games = Seq.choose parseGame >> Seq.toList
 
     let one =
         let maximums =
@@ -174,9 +175,9 @@ module Three =
         let value ({ value = value }) = value
 
     let grid lines =
-        let lines = Array.map (fun (line: string) -> line.ToCharArray()) lines
-        let initializer x y = Array.get (Array.get lines y) x
-        Array2D.init (lines |> Array.map Array.length |> Array.max) (Array.length lines) initializer
+        let lines = Seq.map (fun (line: string) -> line.ToCharArray()) lines
+        let initializer x y = lines |> Seq.item y |> Seq.item x
+        Array2D.init (lines |> Seq.map Array.length |> Seq.max) (Seq.length lines) initializer
 
     let coords { coords = (x, y); length = length } =
         seq { for x in x .. x + length - 1 -> x, y }
@@ -195,7 +196,7 @@ module Three =
         let digits = new System.Text.RegularExpressions.Regex("\d+")
 
         seq {
-            for (y, line) in Array.indexed lines do
+            for (y, line) in Seq.indexed lines do
                 for m in digits.Matches(line) do
                     { coords = m.Index, y
                       length = m.Length
@@ -262,16 +263,18 @@ module Four =
         new System.Text.RegularExpressions.Regex("^Card\s+(\d+):\s+([^\|]+)\|(.*)$")
 
     let parseCard line =
-        let toSet (m: System.Text.RegularExpressions.Group) =
-            m.Value |> String.parseNumbers |> Set.ofSeq
+        let toSet = String.parseNumbers >> Set.ofSeq
 
-        match cardRe.Match(line).Groups |> List.ofSeq with
-        | [ _; id; winning; have ] ->
-            Some
-                { id = System.Convert.ToInt32(id.Value)
-                  have = toSet have
-                  winning = toSet winning }
-        | _ -> None
+        line
+        |> Regex.groups "^Card\s+(\d+):\s+([^\|]+)\|(.*)$"
+        |> Seq.toList
+        |> function
+            | [ _; id; winning; have ] ->
+                Some
+                    { id = int id
+                      have = toSet have
+                      winning = toSet winning }
+            | _ -> None
 
     let matchCount ({ have = have; winning = winning }) =
         winning |> Set.intersect have |> Seq.length
@@ -304,20 +307,38 @@ module Four =
 
 [<EntryPoint>]
 let main args =
-    let readInput day =
-        System.IO.File.ReadAllLines(sprintf "./day-%s-input.txt" day)
 
-    match args with
-    | [| "1"; "1" |] -> "1" |> readInput |> One.one
-    | [| "1"; "2" |] -> "1" |> readInput |> One.two
-    | [| "2"; "1" |] -> "2" |> readInput |> Two.one
-    | [| "2"; "2" |] -> "2" |> readInput |> Two.two
-    | [| "3"; "1" |] -> "3" |> readInput |> Three.one
-    | [| "3"; "2" |] -> "3" |> readInput |> Three.two // 87287096
-    | [| "4"; "1" |] -> "4" |> readInput |> Four.one
-    | [| "4"; "2" |] -> "4" |> readInput |> Four.two // 6189740
-    | [| "5"; "1" |] -> "5" |> readInput |> Five.one
-    | [| "5"; "2" |] -> "5" |> readInput |> Five.two
-    | _ -> printfn "which puzzle?"
+    let readInput () =
+        Seq.initInfinite (fun _ -> stdin.ReadLine())
+        |> Seq.takeWhile ((<>) null)
 
-    0
+    let puzzles =
+        seq {
+            for day, puzzle, f in
+                [ 1, 1, One.one
+                  1, 2, One.two
+                  2, 1, Two.one
+                  2, 2, Two.two
+                  3, 1, Three.one
+                  3, 2, Three.two
+                  4, 1, Four.one
+                  4, 2, Four.two
+                  5, 1, Five.one
+                  5, 2, Five.two ] -> (day, puzzle), f
+        }
+        |> Map.ofSeq
+
+    args
+    |> String.concat " "
+    |> String.parseInts
+    |> Seq.toList
+    |> function
+        | [ day; puzzle ] ->
+            puzzles
+            |> Map.tryFind (day, puzzle)
+            |> Option.iter (fun f -> f (readInput ()))
+
+            0
+        | _ ->
+            printfn "Usage: dotnet run <day> <puzzle> < input.txt"
+            1

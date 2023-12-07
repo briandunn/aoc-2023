@@ -8,6 +8,7 @@
     <Compile Include="Tuple.fs" />
     <Compile Include="String.fs" />
     <Compile Include="Five.fs" />
+    <Compile Include="Regex.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 </Project>
