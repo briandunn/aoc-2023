@@ -1,13 +1,13 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net7.0</TargetFramework>
     <RootNamespace>adventofcode_2023</RootNamespace>
   </PropertyGroup>
-
   <ItemGroup>
+    <Compile Include="Tuple.fs" />
+    <Compile Include="String.fs" />
+    <Compile Include="Five.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
-
 </Project>
