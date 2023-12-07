@@ -6,8 +6,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Tuple.fs" />
-    <Compile Include="String.fs" />
     <Compile Include="Regex.fs" />
+    <Compile Include="String.fs" />
     <Compile Include="Five.fs" />
     <Compile Include="Six.fs" />
     <Compile Include="Program.fs" />

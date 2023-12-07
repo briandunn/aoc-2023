@@ -135,9 +135,7 @@ module Two =
 
         let sumBy ({ id = id }) = id
 
-        games
-        >> List.filter filter
-        >> List.sumBy sumBy
+        games >> List.filter filter >> List.sumBy sumBy
 
     let two =
         let maxHand (a: Hand) : Hand -> Hand =
@@ -156,9 +154,7 @@ module Two =
 
         let power: Hand -> int = Map.values >> Seq.fold (*) 1
 
-        games
-        >> List.map (fewest >> power)
-        >> List.sum
+        games >> List.map (fewest >> power) >> List.sum
 
 module Three =
     type Coords = int * int
@@ -245,9 +241,7 @@ module Three =
             let fold acc ({ value = value }) = acc * value
             Seq.fold fold 1
 
-        gears
-        |> Seq.choose choose
-        |> Seq.sumBy gearRatio
+        gears |> Seq.choose choose |> Seq.sumBy gearRatio
 
 module Four =
     type Card =
@@ -275,8 +269,7 @@ module Four =
     let one =
         let score card = pown 2 ((matchCount card) - 1)
 
-        Seq.choose parseCard
-        >> Seq.sumBy score
+        Seq.choose parseCard >> Seq.sumBy score
 
     let two =
         let score card = matchCount card, 1
@@ -317,8 +310,7 @@ let main args =
                   5, 1, Five.one
                   5, 2, Five.two
                   6, 1, Six.one
-                  6, 2, Six.two
-                  ] -> (day, puzzle), f
+                  6, 2, Six.two ] -> (day, puzzle), f
         }
         |> Map.ofSeq
 
@@ -331,13 +323,15 @@ let main args =
             puzzles
             |> Map.tryFind (day, puzzle)
             |> function
-            | Some f -> stdin |> readLines |> f |> printfn "%A"
-                        0
-            | None ->
-                printfn "No puzzle %d for day %d" puzzle day
-                1
+                | Some f ->
+                    stdin |> readLines |> f |> printfn "%A"
+                    0
+                | None ->
+                    printfn "No puzzle %d for day %d" puzzle day
+                    1
 
 
-        | _ ->
+        | m ->
+            printfn "invalid input: %A" m
             printfn "Usage: dotnet run <day> <puzzle> < input.txt"
             1
