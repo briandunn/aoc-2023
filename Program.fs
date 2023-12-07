@@ -342,6 +342,20 @@ module Five =
         { inputs: int64 list
           maps: Map<string, RangeMap> }
 
+    module RangeMap =
+        let sort (map: Map<string, RangeMap>) =
+            let rec loop rangeMap : RangeMap list =
+                rangeMap
+                :: (map
+                    |> Map.tryFind rangeMap.dest
+                    |> Option.map loop
+                    |> Option.defaultValue [])
+
+            map
+            |> Map.tryFind "seed"
+            |> Option.map loop
+            |> Option.defaultValue []
+
     let parse: string seq -> Almanac =
         let rec parseRanges =
             function
@@ -419,41 +433,31 @@ module Five =
                 | Some (dest, mapped) -> resolveInput dest mapped
                 | None -> (kind, input)
 
-        List.map (resolveInput "seed")
+        Seq.map (resolveInput "seed")
 
     let one lines =
         let { inputs = inputs; maps = maps } = parse lines
 
         inputs
         |> resolve maps
-        |> List.minBy Tuple.second
+        |> Seq.minBy Tuple.second
         |> printfn "%A"
+
 
     let two lines =
         let { inputs = inputs; maps = maps } = parse lines
 
         let rec expand =
             function
-            | start :: length :: rest -> (start, length) :: expand rest
-            | _ -> []
+            | start :: length :: rest -> seq { for i in start..start + length - 1L -> i } |> Seq.append (expand rest)
+            | _ -> Seq.empty
 
-        let ranges = expand inputs
+        let inputs = expand inputs
 
-        // can't bruit force this one
-        // find the boundary conditions -
-        // for each map range that the input range overlaps
-        // find the overlap start and stop
-        // just feed those through
-
-
-        ranges |> printfn "%A"
-
-// inputs
-// |> expand
-// |> resolve maps
-// |> List.minBy Tuple.second
-// |> printfn "%A"
-
+        inputs
+        |> resolve maps
+        |> Seq.minBy Tuple.second
+        |> printfn "%A"
 
 [<EntryPoint>]
 let main args =
