@@ -4,25 +4,14 @@ type Hand = int list
 
 type Turn = { hand: Hand; bid: int }
 
-let strengths =
-    [ 'A'
-      'K'
-      'Q'
-      'J'
-      'T'
-      '9'
-      '8'
-      '7'
-      '6'
-      '5'
-      '4'
-      '3'
-      '2' ]
-    |> List.rev
-    |> List.mapi (fun i c -> (c, i))
-    |> Map.ofList
+let strengthMap: char list -> Map<char, int> =
+    List.rev
+    >> List.mapi (fun i c -> (c, i))
+    >> Map.ofList
 
-let parse lines =
+let parse strengths lines =
+    let strengths = strengthMap strengths
+
     let parseTurn line =
         line
         |> Regex.groups "([AKQJT98765432]+) ([0-9]+)"
@@ -75,7 +64,7 @@ let handType hand =
     |> Option.map (fun (i, _) -> i + 1)
     |> Option.defaultValue 0
 
-let one lines =
+let totalWinnings handType =
     let sortWith { hand = handA } { hand = handB } =
         match compare (handType handA) (handType handB) with
         | 0 -> compare handA handB
@@ -83,7 +72,56 @@ let one lines =
 
     let mapi i { bid = bid } = (i + 1) * bid
 
-    parse lines
-    |> Seq.sortWith sortWith
-    |> Seq.mapi mapi
-    |> Seq.sum
+    Seq.sortWith sortWith >> Seq.mapi mapi >> Seq.sum
+
+let one: string seq -> int =
+    parse [ 'A'
+            'K'
+            'Q'
+            'J'
+            'T'
+            '9'
+            '8'
+            '7'
+            '6'
+            '5'
+            '4'
+            '3'
+            '2' ]
+    >> totalWinnings handType
+
+let two: string seq -> int =
+    let strengths =
+        [ 'A'
+          'K'
+          'Q'
+          'T'
+          '9'
+          '8'
+          '7'
+          '6'
+          '5'
+          '4'
+          '3'
+          '2'
+          'J' ]
+
+    let rec expandJokers jokerCount hand =
+        match jokerCount with
+        | 0 -> [ hand ]
+        | count ->
+            [ for s in 0 .. (List.length strengths - 1) -> (s :: hand) ]
+            |> List.map (expandJokers (count - 1))
+            |> List.concat
+
+    let bestJokers: Hand -> int =
+        List.partition ((=) 0)
+        >> function
+            | ([], hand) -> handType hand
+            | (jokers, hand) ->
+                hand
+                |> expandJokers (List.length jokers)
+                |> List.map handType
+                |> List.max
+
+    parse strengths >> totalWinnings bestJokers
