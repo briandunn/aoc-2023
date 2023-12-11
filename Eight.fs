@@ -10,11 +10,6 @@ type Network =
     { nodes: Map<string, Node>
       instructions: Instruction seq }
 
-module Network =
-    let init instructions nodes =
-        { nodes = nodes
-          instructions = instructions }
-
 let parse: string seq -> Network =
     let parseInstructions: string -> Instruction seq =
         Seq.choose (function

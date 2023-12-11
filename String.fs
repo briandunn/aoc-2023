@@ -3,7 +3,7 @@ module String
 open System
 open System.Text.RegularExpressions
 
-let numRe = new Regex("\d+")
+let numRe = new Regex("-?\d+")
 
 let parseNumbers: string -> int64 seq =
     let map (v: string) =
