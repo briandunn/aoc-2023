@@ -79,13 +79,20 @@ let connectsFrom ordinal tile =
     | _, Animal -> true
     | _ -> false
 
-let furthest =
+let furthest: Coords seq seq -> int =
     Seq.map Seq.length
     >> Seq.countBy id
     >> Seq.filter (fun (_, count) -> count = 2)
     >> Seq.map (fun (length, _) -> length / 2)
     >> Seq.max
     >> ((+) 1)
+
+let opposite =
+    function
+    | North -> South
+    | South -> North
+    | East -> West
+    | West -> East
 
 let one (lines: string seq) : int =
     let grid = parse lines
@@ -107,32 +114,43 @@ let one (lines: string seq) : int =
         | West -> (x - 1, y)
         >> inBounds
 
-    let connected (c: Coords) =
-        let choose ordinal =
-            let filter adjacent =
-                grid |> item adjacent |> connectsFrom ordinal
+    let path (from: Cardinal) (start: Coords) : Coords seq =
+        let unfold (from, start) =
+            let bind cardinal =
+                let map next = start, (cardinal, next)
 
-            ordinal |> coords c |> Option.filter filter
+                cardinal
+                |>coords start
+                |> Option.map map
+
+            grid
+            |> item start
+            |> openSides
+            |> Set.filter ((<>) (opposite from))
+            |> Seq.tryExactlyOne
+            |> Option.bind bind
+
+        Seq.unfold unfold (from, start)
+
+    let notAnimal coords = item coords grid <> Animal
+
+    let fromAnimal animal =
+        let choose cardinal =
+            let map coords =
+                coords
+                |> path cardinal
+                |> Seq.takeWhile notAnimal
+
+            cardinal |> coords animal |> Option.map map
 
         grid
-        |> item c
+        |> item animal
         |> openSides
         |> Seq.choose choose
-        |> Set.ofSeq
-
-    let rec follow (visited: Coords Set) (start: Coords) =
-        let notVisited candidates = Set.difference candidates visited
-
-        let map coords : Coords seq =
-            seq {
-                for c in follow (Set.add start visited) coords do
-                    start
-                    yield! c
-            }
-
-        start |> connected |> notVisited |> Seq.map map
 
     grid
     |> tryFindIndex ((=) Animal)
-    |> Option.map (follow Set.empty >> furthest)
+    |> Option.map (fromAnimal >> furthest)
     |> Option.defaultValue 0
+
+let two (lines: string seq) : int = 0
