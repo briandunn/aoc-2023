@@ -79,14 +79,6 @@ let connectsFrom ordinal tile =
     | _, Animal -> true
     | _ -> false
 
-let furthest: Coords seq seq -> int =
-    Seq.map Seq.length
-    >> Seq.countBy id
-    >> Seq.filter (fun (_, count) -> count = 2)
-    >> Seq.map (fun (length, _) -> length / 2)
-    >> Seq.max
-    >> ((+) 1)
-
 let opposite =
     function
     | North -> South
@@ -94,9 +86,7 @@ let opposite =
     | East -> West
     | West -> East
 
-let one (lines: string seq) : int =
-    let grid = parse lines
-
+let loopsFromAnimal grid =
     let inBounds (x, y) =
         if x >= 0
            && y >= 0
@@ -114,7 +104,7 @@ let one (lines: string seq) : int =
         | West -> (x - 1, y)
         >> inBounds
 
-    let path (from: Cardinal) (start: Coords) =
+    let follow (from: Cardinal) (start: Coords) =
         let unfold (from, start) =
             let bind cardinal =
                 let map next = (from, start), (cardinal, next)
@@ -134,13 +124,13 @@ let one (lines: string seq) : int =
 
     let fromAnimal animal =
         let unfold cardinals : ((Cardinal * Coords) seq * Cardinal Set) option =
-            let map cardinal coords =
-                coords |> path cardinal |> Seq.takeWhile notAnimal
-
-            cardinals
-            |> Seq.tryHead
-            |> Option.map (fun cardinal ->
+            let map cardinal =
                 let path =
+                    let map cardinal coords =
+                        coords
+                        |> follow cardinal
+                        |> Seq.takeWhile notAnimal
+
                     cardinal
                     |> coords animal
                     |> Option.map (map cardinal)
@@ -156,7 +146,9 @@ let one (lines: string seq) : int =
                         cardinals
                         |> Seq.filter ((<>) (opposite cardinal))
                         |> Set.ofSeq
-                    | None -> path, Set.ofSeq cardinals)
+                    | None -> path, Set.ofSeq cardinals
+
+            cardinals |> Seq.tryHead |> Option.map map
 
         grid
         |> item animal
@@ -165,7 +157,15 @@ let one (lines: string seq) : int =
 
     grid
     |> tryFindIndex ((=) Animal)
-    |> Option.map (fromAnimal >> Seq.map Seq.length >> Seq.max >> ((+) 1) >> (fun max -> max / 2))
-    |> Option.defaultValue 0
+    |> Option.map fromAnimal
+    |> Option.defaultValue Seq.empty
+
+let one: string seq -> int =
+    parse
+    >> loopsFromAnimal
+    >> Seq.map Seq.length
+    >> Seq.max
+    >> ((+) 1)
+    >> (fun max -> max / 2)
 
 let two (lines: string seq) : int = 0
