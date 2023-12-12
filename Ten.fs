@@ -114,14 +114,12 @@ let one (lines: string seq) : int =
         | West -> (x - 1, y)
         >> inBounds
 
-    let path (from: Cardinal) (start: Coords) : Coords seq =
+    let path (from: Cardinal) (start: Coords) =
         let unfold (from, start) =
             let bind cardinal =
-                let map next = start, (cardinal, next)
+                let map next = (from, start), (cardinal, next)
 
-                cardinal
-                |>coords start
-                |> Option.map map
+                cardinal |> coords start |> Option.map map
 
             grid
             |> item start
@@ -132,25 +130,42 @@ let one (lines: string seq) : int =
 
         Seq.unfold unfold (from, start)
 
-    let notAnimal coords = item coords grid <> Animal
+    let notAnimal (_, coords) = item coords grid <> Animal
 
     let fromAnimal animal =
-        let choose cardinal =
-            let map coords =
-                coords
-                |> path cardinal
-                |> Seq.takeWhile notAnimal
+        let unfold cardinals : ((Cardinal * Coords) seq * Cardinal Set) option =
+            let map cardinal coords =
+                coords |> path cardinal |> Seq.takeWhile notAnimal
 
-            cardinal |> coords animal |> Option.map map
+            cardinals
+            |> Seq.tryHead
+            |> Option.map (fun cardinal ->
+                let path =
+                    cardinal
+                    |> coords animal
+                    |> Option.map (map cardinal)
+                    |> Option.defaultValue Seq.empty
+
+                let cardinals = Seq.tail cardinals
+
+                path
+                |> Seq.tryLast
+                |> function
+                    | Some (cardinal, _) ->
+                        path,
+                        cardinals
+                        |> Seq.filter ((<>) (opposite cardinal))
+                        |> Set.ofSeq
+                    | None -> path, Set.ofSeq cardinals)
 
         grid
         |> item animal
         |> openSides
-        |> Seq.choose choose
+        |> Seq.unfold unfold
 
     grid
     |> tryFindIndex ((=) Animal)
-    |> Option.map (fromAnimal >> furthest)
+    |> Option.map (fromAnimal >> Seq.map Seq.length >> Seq.max >> ((+) 1) >> (fun max -> max / 2))
     |> Option.defaultValue 0
 
 let two (lines: string seq) : int = 0
