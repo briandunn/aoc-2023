@@ -8,12 +8,14 @@
     <Compile Include="Tuple.fs" />
     <Compile Include="Regex.fs" />
     <Compile Include="String.fs" />
+    <Compile Include="Grid.fs" />
     <Compile Include="Five.fs" />
     <Compile Include="Six.fs" />
     <Compile Include="Seven.fs" />
     <Compile Include="Eight.fs" />
     <Compile Include="Nine.fs" />
     <Compile Include="Ten.fs" />
+    <Compile Include="Eleven.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 </Project>

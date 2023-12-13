@@ -21,9 +21,8 @@ let inline p label x =
     printfn "%s: %A" label x
     x
 
-let parse lines : Grid =
-    let charToTile =
-        function
+let parse =
+    Grid.parse (function
         | '|' -> Pipe(Set.ofList [ North; South ])
         | 'L' -> Pipe(Set.ofList [ North; East ])
         | 'J' -> Pipe(Set.ofList [ North; West ])
@@ -32,22 +31,7 @@ let parse lines : Grid =
         | 'F' -> Pipe(Set.ofList [ East; South ])
         | 'S' -> Animal
         | '.' -> Ground
-        | _ -> failwith "invalid tile"
-
-    let tiles =
-        Map.ofSeq
-        <| seq {
-            for y, line in Seq.indexed lines do
-                for x, c in Seq.indexed line -> (x, y), charToTile c
-        }
-
-
-    let keys = Map.keys tiles
-    let max f = keys |> Seq.map f |> Seq.max
-
-    let init x y = Map.find (x, y) tiles
-
-    Array2D.init (max Tuple.first + 1) (max Tuple.second + 1) init
+        | _ -> failwith "invalid tile")
 
 
 let indexes predicate array =
@@ -214,8 +198,7 @@ let reachableFrom ground =
     // |> Set.filter (not << (blocked ground))
     |> Set.map (coords ground)
 
-let isInside grid loop ground =
-    false
+let isInside grid loop ground = false
 
 let one: string seq -> int =
     parse
