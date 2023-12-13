@@ -47,14 +47,17 @@ let parse lines : Tile array2d =
     Array2D.init (max Tuple.first + 1) (max Tuple.second + 1) init
 
 
-let tryFindIndex predicate array =
+let indexes predicate array =
     seq {
         for x in 0 .. Array2D.length1 array - 1 do
             for y in 0 .. Array2D.length2 array - 1 do
                 if predicate <| Array2D.get array x y then
                     (x, y)
     }
-    |> Seq.tryHead
+
+let tryFindIndex predicate = indexes predicate >> Seq.tryExactlyOne
+
+
 
 let inRange (x, y) grid =
     x < Array2D.length1 grid
@@ -86,6 +89,13 @@ let opposite =
     | East -> West
     | West -> East
 
+let coords ((x, y): Coords) : Cardinal -> Coords =
+    function
+    | North -> (x, y - 1)
+    | East -> (x + 1, y)
+    | South -> (x, y + 1)
+    | West -> (x - 1, y)
+
 let loopsFromAnimal grid =
     let inBounds (x, y) =
         if x >= 0
@@ -96,20 +106,15 @@ let loopsFromAnimal grid =
         else
             None
 
-    let coords ((x, y): Coords) : Cardinal -> Coords option =
-        function
-        | North -> (x, y - 1)
-        | East -> (x + 1, y)
-        | South -> (x, y + 1)
-        | West -> (x - 1, y)
-        >> inBounds
-
     let follow (from: Cardinal) (start: Coords) =
         let unfold (from, start) =
             let bind cardinal =
                 let map next = (from, start), (cardinal, next)
 
-                cardinal |> coords start |> Option.map map
+                cardinal
+                |> coords start
+                |> inBounds
+                |> Option.map map
 
             grid
             |> item start
@@ -133,6 +138,7 @@ let loopsFromAnimal grid =
 
                     cardinal
                     |> coords animal
+                    |> inBounds
                     |> Option.map (map cardinal)
                     |> Option.defaultValue Seq.empty
 
@@ -157,8 +163,23 @@ let loopsFromAnimal grid =
 
     grid
     |> tryFindIndex ((=) Animal)
-    |> Option.map fromAnimal
+    |> Option.map (fromAnimal >> Seq.filter (Seq.isEmpty >> not))
     |> Option.defaultValue Seq.empty
+
+let adjacent ((xa, ya): Coords) ((xb, yb): Coords) : bool =
+    abs (xa - xb) <= 1 && abs (ya - yb) <= 1
+
+let rec expand (grounds: Coords list) : Coords list =
+    match grounds with
+    | head :: rest ->
+        let adjacent, rest = List.partition (adjacent head) rest
+
+        head
+        :: (adjacent
+            |> List.map (fun a -> expand (a :: rest))
+            |> List.concat)
+
+    | [] -> []
 
 let one: string seq -> int =
     parse
@@ -168,4 +189,68 @@ let one: string seq -> int =
     >> ((+) 1)
     >> (fun max -> max / 2)
 
-let two (lines: string seq) : int = 0
+let two (lines: string seq) : int =
+    let grid = parse lines
+
+    let onEdge ((x, y): Coords) : bool =
+        x = 0
+        || y = 0
+        || x = Array2D.length1 grid - 1
+        || y = Array2D.length2 grid - 1
+
+    let loop =
+        grid
+        |> loopsFromAnimal
+        |> Seq.map (fun path -> path |> Seq.map (fun (_, coords) -> coords))
+        |> Seq.concat
+        |> Set.ofSeq
+
+
+    let perpendicular cardinal pipe =
+        [ p "cardinal" cardinal
+          opposite cardinal ]
+        |> Set.ofList
+        |> Set.difference (p "pipe" pipe)
+        |> Seq.length
+        |> ((=) 2)
+        |> p "perpendicular"
+
+    let blocked ground cardinal =
+        let next = (coords ground) cardinal
+
+        Set.contains next loop
+        && grid
+           |> item next
+           |> openSides
+           |> perpendicular cardinal
+
+
+    // pick a ground tile
+    // walk east until you hit a wall or the loop
+    // turn south and walk until you hit a wall or the loop
+    // turn west and walk until you hit a wall or the loop
+
+    let reachableFrom ground =
+        [ North; East; South; West ]
+        |> Set.ofList
+        |> Set.filter (not << (blocked ground))
+        |> Set.map (coords ground)
+
+    let rec isInside visited ground =
+        if onEdge ground then
+            false
+        else
+            visited
+            |> (Set.difference (reachableFrom ground))
+            |> Seq.forall (isInside (Set.add ground visited))
+
+
+
+    grid
+    |> indexes ((=) Ground)
+    |> Seq.filter (isInside Set.empty)
+    |> Set.ofSeq
+    // |> Set.difference loop
+    |> printfn "partitioned: %A"
+
+    0
