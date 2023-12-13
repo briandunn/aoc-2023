@@ -8,17 +8,20 @@ type Cardinal =
     | South
     | West
 
+type Pipe = Cardinal Set
+
 type Tile =
-    | Pipe of Cardinal Set
+    | Pipe of Pipe
     | Animal
     | Ground
 
+type Grid = Tile array2d
 
 let inline p label x =
     printfn "%s: %A" label x
     x
 
-let parse lines : Tile array2d =
+let parse lines : Grid =
     let charToTile =
         function
         | '|' -> Pipe(Set.ofList [ North; South ])
@@ -181,6 +184,39 @@ let rec expand (grounds: Coords list) : Coords list =
 
     | [] -> []
 
+
+let perpendicular (cardinal: Cardinal) (pipe: Pipe) : bool =
+    [ cardinal; opposite cardinal ]
+    |> Set.ofList
+    |> Set.difference pipe
+    |> Set.count
+    |> ((=) 2)
+
+let blocked ground cardinal loop grid =
+    let next = (coords ground) cardinal
+
+    Set.contains next loop
+    && grid
+       |> item next
+       |> openSides
+       |> perpendicular cardinal
+
+
+let onEdge ((x, y): Coords) grid : bool =
+    x = 0
+    || y = 0
+    || x = Array2D.length1 grid - 1
+    || y = Array2D.length2 grid - 1
+
+let reachableFrom ground =
+    [ North; East; South; West ]
+    |> Set.ofList
+    // |> Set.filter (not << (blocked ground))
+    |> Set.map (coords ground)
+
+let isInside grid loop ground =
+    false
+
 let one: string seq -> int =
     parse
     >> loopsFromAnimal
@@ -192,37 +228,12 @@ let one: string seq -> int =
 let two (lines: string seq) : int =
     let grid = parse lines
 
-    let onEdge ((x, y): Coords) : bool =
-        x = 0
-        || y = 0
-        || x = Array2D.length1 grid - 1
-        || y = Array2D.length2 grid - 1
-
     let loop =
         grid
         |> loopsFromAnimal
-        |> Seq.map (fun path -> path |> Seq.map (fun (_, coords) -> coords))
+        |> Seq.map (Seq.map Tuple.second)
         |> Seq.concat
         |> Set.ofSeq
-
-
-    let perpendicular cardinal pipe =
-        [ p "cardinal" cardinal
-          opposite cardinal ]
-        |> Set.ofList
-        |> Set.difference (p "pipe" pipe)
-        |> Seq.length
-        |> ((=) 2)
-        |> p "perpendicular"
-
-    let blocked ground cardinal =
-        let next = (coords ground) cardinal
-
-        Set.contains next loop
-        && grid
-           |> item next
-           |> openSides
-           |> perpendicular cardinal
 
 
     // pick a ground tile
@@ -230,25 +241,10 @@ let two (lines: string seq) : int =
     // turn south and walk until you hit a wall or the loop
     // turn west and walk until you hit a wall or the loop
 
-    let reachableFrom ground =
-        [ North; East; South; West ]
-        |> Set.ofList
-        |> Set.filter (not << (blocked ground))
-        |> Set.map (coords ground)
-
-    let rec isInside visited ground =
-        if onEdge ground then
-            false
-        else
-            visited
-            |> (Set.difference (reachableFrom ground))
-            |> Seq.forall (isInside (Set.add ground visited))
-
-
 
     grid
     |> indexes ((=) Ground)
-    |> Seq.filter (isInside Set.empty)
+    |> Seq.filter (isInside grid loop)
     |> Set.ofSeq
     // |> Set.difference loop
     |> printfn "partitioned: %A"

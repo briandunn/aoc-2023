@@ -1,0 +1,156 @@
+{
+  "format": 1,
+  "restore": {
+    "/Users/brian/src/adventofcode-2023/test/test.fsproj": {}
+  },
+  "projects": {
+    "/Users/brian/src/adventofcode-2023/src/adventofcode-2023.fsproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/brian/src/adventofcode-2023/src/adventofcode-2023.fsproj",
+        "projectName": "adventofcode-2023",
+        "projectPath": "/Users/brian/src/adventofcode-2023/src/adventofcode-2023.fsproj",
+        "packagesPath": "/Users/brian/.nuget/packages/",
+        "outputPath": "/Users/brian/src/adventofcode-2023/src/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/brian/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net7.0"
+        ],
+        "sources": {
+          "/usr/local/share/dotnet/sdk/7.0.306/FSharp/library-packs": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net7.0": {
+            "targetAlias": "net7.0",
+            "projectReferences": {}
+          }
+        }
+      },
+      "frameworks": {
+        "net7.0": {
+          "targetAlias": "net7.0",
+          "dependencies": {
+            "FSharp.Core": {
+              "include": "Runtime, Compile, Build, Native, Analyzers, BuildTransitive",
+              "target": "Package",
+              "version": "[7.0.300, )",
+              "generatePathProperty": true
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/7.0.306/RuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "/Users/brian/src/adventofcode-2023/test/test.fsproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/brian/src/adventofcode-2023/test/test.fsproj",
+        "projectName": "test",
+        "projectPath": "/Users/brian/src/adventofcode-2023/test/test.fsproj",
+        "packagesPath": "/Users/brian/.nuget/packages/",
+        "outputPath": "/Users/brian/src/adventofcode-2023/test/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/brian/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net7.0"
+        ],
+        "sources": {
+          "/usr/local/share/dotnet/sdk/7.0.306/FSharp/library-packs": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net7.0": {
+            "targetAlias": "net7.0",
+            "projectReferences": {
+              "/Users/brian/src/adventofcode-2023/src/adventofcode-2023.fsproj": {
+                "projectPath": "/Users/brian/src/adventofcode-2023/src/adventofcode-2023.fsproj"
+              }
+            }
+          }
+        }
+      },
+      "frameworks": {
+        "net7.0": {
+          "targetAlias": "net7.0",
+          "dependencies": {
+            "FSharp.Core": {
+              "include": "Runtime, Compile, Build, Native, Analyzers, BuildTransitive",
+              "target": "Package",
+              "version": "[7.0.300, )",
+              "generatePathProperty": true
+            },
+            "Microsoft.NET.Test.Sdk": {
+              "target": "Package",
+              "version": "[17.5.0, )",
+              "generatePathProperty": true
+            },
+            "NUnit": {
+              "target": "Package",
+              "version": "[3.13.3, )",
+              "generatePathProperty": true
+            },
+            "NUnit.Analyzers": {
+              "target": "Package",
+              "version": "[3.6.1, )",
+              "generatePathProperty": true
+            },
+            "NUnit3TestAdapter": {
+              "target": "Package",
+              "version": "[4.4.2, )",
+              "generatePathProperty": true
+            },
+            "coverlet.collector": {
+              "target": "Package",
+              "version": "[3.2.0, )",
+              "generatePathProperty": true
+            },
+            "fsunit": {
+              "target": "Package",
+              "version": "[5.6.1, )",
+              "generatePathProperty": true
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/7.0.306/RuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}
