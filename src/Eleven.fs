@@ -1,11 +1,14 @@
 module Eleven
 
-let parse: string seq -> bool Grid.Grid =
-    Grid.parse
-    <| function
-        | '#' -> true
-        | '.' -> false
-        | _ -> failwith "invalid tile"
+type Coords = int * int
+
+let parse (lines: string seq) : Coords Set =
+    Set.ofSeq
+    <| seq {
+        for y, line in Seq.indexed lines do
+            for x, c in Seq.indexed line do
+                if c = '#' then yield x, y
+    }
 
 let print =
     Grid.rows
@@ -16,24 +19,33 @@ let print =
     )
 
 
-let expand =
-    let map (row: bool seq) =
-        if row |> Seq.contains true then
-            seq { row }
-        else
-            seq {
-                row
-                row
-            }
+let between min max x = x > min && x < max
 
-    Grid.rows
-    >> Seq.map map
-    >> Seq.concat
-    >> Grid.fromRows
-    >> Grid.columns
-    >> Seq.map map
-    >> Seq.concat
-    >> Grid.fromColumns
+let expand n =
+    let expand (get: 'a -> int) (update: (int -> int) -> 'a -> 'a) (image: 'a Set) : 'a Set =
+        let occupied = Seq.map get image
+        let max = Seq.max occupied
+
+        let blanks = Set.difference (Set.ofSeq <| seq { 0..max }) (Set.ofSeq occupied)
+
+        let mapi i (blankA, blankB) =
+            let shift = (n - 1) * i
+
+            image
+            |> Seq.filter (get >> (between blankA blankB))
+            |> Seq.map (update ((+) shift))
+
+        seq {
+            -1
+            yield! blanks
+            max + 1
+        }
+        |> Seq.pairwise
+        |> Seq.mapi mapi
+        |> Seq.concat
+        |> Set.ofSeq
+
+    expand Tuple.first (fun f (x, y) -> f x, y) >> expand Tuple.second (fun f (x, y) -> x, f y)
 
 
 let rec combinations n list =
@@ -53,9 +65,8 @@ let shortestPath =
 
 let one: string seq -> int =
     parse
-    >> expand
-    >> Grid.indexes id
+    >> expand 2
     >> Seq.toList
     >> combinations 2
     >> List.choose shortestPath
-    >> List.sum
+    >> List.sum // 10494813
