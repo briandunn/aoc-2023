@@ -17,3 +17,5 @@ let parseNumbers: string -> int64 seq =
     Regex.matches "\d+" >> Seq.map map
 
 let parseInts: string -> int seq = Regex.matches "\d+" >> Seq.map int
+
+let split (c: char) (s: string) : string seq = s.Split(c)
