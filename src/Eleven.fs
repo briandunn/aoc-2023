@@ -10,26 +10,17 @@ let parse (lines: string seq) : Coords Set =
                 if c = '#' then yield x, y
     }
 
-let print =
-    Grid.rows
-    >> Seq.iter (
-        Seq.map (fun b -> if b then "#" else ".")
-        >> String.concat ""
-        >> printfn "%s"
-    )
-
-
 let between min max x = x > min && x < max
 
 let expand n =
-    let expand (get: 'a -> int) (update: (int -> int) -> 'a -> 'a) (image: 'a Set) : 'a Set =
+    let expand get update image =
         let occupied = Seq.map get image
         let max = Seq.max occupied
 
         let blanks = Set.difference (Set.ofSeq <| seq { 0..max }) (Set.ofSeq occupied)
 
         let mapi i (blankA, blankB) =
-            let shift = (n - 1) * i
+            let shift = (n - 1L) * (int64 i)
 
             image
             |> Seq.filter (get >> (between blankA blankB))
@@ -45,7 +36,8 @@ let expand n =
         |> Seq.concat
         |> Set.ofSeq
 
-    expand Tuple.first (fun f (x, y) -> f x, y) >> expand Tuple.second (fun f (x, y) -> x, f y)
+    expand Tuple.first (fun f (x, y) -> f x, y)
+    >> expand Tuple.second (fun f (x, y) -> x, f y)
 
 
 let rec combinations n list =
@@ -65,8 +57,22 @@ let shortestPath =
 
 let one: string seq -> int =
     parse
-    >> expand 2
+    >> expand 2L
     >> Seq.toList
     >> combinations 2
     >> List.choose shortestPath
     >> List.sum // 10494813
+    >> (int)
+
+
+let two (lines: string seq) : int =
+    lines
+    |> parse
+    |> expand 1000000L
+    |> Seq.toList
+    |> combinations 2
+    |> List.choose shortestPath
+    |> List.sum // 10494813
+    |> printfn "%A"
+
+    0
