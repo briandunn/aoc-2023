@@ -57,6 +57,7 @@ let satisfies
     |> damagedGroupLengths
     |> ((=) (Seq.toList lengths))
 
+
 let permute ({ statuses = statuses } as r) =
     let slots =
         statuses
@@ -64,12 +65,10 @@ let permute ({ statuses = statuses } as r) =
         |> Seq.length
 
     let rec permute length options =
-        if length = 0 then
-            []
-
-        else if length = 1 then
-            List.map List.singleton options
-        else
+        match length with
+        | 0 -> []
+        | 1 -> List.map List.singleton options
+        | length ->
             options
             |> (permute (length - 1))
             |> List.map (fun permutation -> List.map (fun option -> option :: permutation) options)
