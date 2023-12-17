@@ -43,7 +43,6 @@ let findSymmetry: int list list -> int =
 
     findSymmetry []
 
-
 let one lines =
     let fold ((c, r): int * int) (pattern: Pattern) =
         c + (pattern |> columns |> findSymmetry), r + (pattern |> rows |> findSymmetry)
