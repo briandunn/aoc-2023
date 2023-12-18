@@ -100,8 +100,8 @@ let step (x, y) =
 let one lines =
     let { tiles = tiles; dims = (w, h) } = parse lines
 
-    let rec travel vectors visited =
-        match vectors with
+    let rec travel visited =
+        function
         | (((x, y) as start), direction) :: rest ->
             if x < 0
                || x >= w
@@ -109,20 +109,19 @@ let one lines =
                || y >= h
                || Set.contains (start, direction) visited then
 
-                travel rest visited
+                travel visited rest
             else
-                let vectors =
-                    tiles
-                    |> Map.tryFind start
-                    |> nextHeading direction
-                    |> List.map (fun h -> step start h, h)
-                    |> List.append rest
-
-                travel vectors (Set.add (start, direction) visited)
+                tiles
+                |> Map.tryFind start
+                |> nextHeading direction
+                |> List.map (fun h -> step start h, h)
+                |> List.append rest
+                |> travel (Set.add (start, direction) visited)
 
         | [] -> visited
 
 
-    travel [ (0, 0), E ] Set.empty
+    [ (0, 0), E ]
+    |> travel Set.empty
     |> Set.map fst
     |> Set.count
