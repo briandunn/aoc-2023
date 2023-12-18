@@ -67,45 +67,47 @@ let print (w, h) energized =
 let one lines =
     let { tiles = tiles; dims = (w, h) } = parse lines |> Ten.p "parse"
 
-    let rec travel ((x, y) as start) direction =
+    let rec travel ((x, y) as start) direction visited =
         let head direction =
             match direction with
             | N -> travel (x, y - 1) N
             | E -> travel (x + 1, y) E
             | S -> travel (x, y + 1) S
             | W -> travel (x - 1, y) W
+            <| Set.add (start, direction) visited
 
-        if x < 0 || x >= w || y < 0 || y >= h then
-            []
+        if x < 0
+           || x >= w
+           || y < 0
+           || y >= h
+           || Set.contains (start, direction) visited then
+            visited
         else
-            (start, direction)
-            :: (match (Map.tryFind start tiles) with
-                | Some (Splitter Vertical) ->
-                    match direction with
-                    | E
-                    | W -> (head N) @ (head S)
-                    | c -> head c
-                | Some (Splitter Horizontal) ->
-                    match direction with
-                    | N
-                    | S -> (head W) @ (head E)
-                    | c -> head c
-                | Some (Mirror SWNE) ->
-                    match direction with
-                    | N -> head E
-                    | E -> head N
-                    | S -> head W
-                    | W -> head S
-                | Some (Mirror NWSE) ->
-                    match direction with
-                    | N -> head W
-                    | E -> head S
-                    | S -> head E
-                    | W -> head N
-                | None -> head direction)
+            match (Map.tryFind start tiles) with
+            | Some (Splitter Vertical) ->
+                match direction with
+                | E
+                | W -> Set.union (head N) (head S)
+                | c -> head c
+            | Some (Splitter Horizontal) ->
+                match direction with
+                | N
+                | S -> Set.union (head E) (head W)
+                | c -> head c
+            | Some (Mirror SWNE) ->
+                match direction with
+                | N -> head E
+                | E -> head N
+                | S -> head W
+                | W -> head S
+            | Some (Mirror NWSE) ->
+                match direction with
+                | N -> head W
+                | E -> head S
+                | S -> head E
+                | W -> head N
+            | None -> head direction
 
-
-    // travel (0, 0) E |> print (w, h)
-    travel (0, 0) E |> printfn "%A" 
-
-    1
+    travel (0, 0) E Set.empty
+    |> Set.map fst
+    |> Set.count
