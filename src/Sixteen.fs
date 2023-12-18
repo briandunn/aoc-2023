@@ -92,31 +92,30 @@ let nextHeading direction tile =
 
 let step (x, y) =
     function
-    | N -> (x, y - 1)
-    | E -> (x + 1, y)
-    | S -> (x, y + 1)
-    | W -> (x - 1, y)
+    | N -> (x, y - 1), N
+    | E -> (x + 1, y), E
+    | S -> (x, y + 1), S
+    | W -> (x - 1, y), W
 
 let one lines =
     let { tiles = tiles; dims = (w, h) } = parse lines
 
+    let inBounds (x, y) = x >= 0 && x < w && y >= 0 && y < h
+
     let rec travel visited =
         function
-        | (((x, y) as start), direction) :: rest ->
-            if x < 0
-               || x >= w
-               || y < 0
-               || y >= h
-               || Set.contains (start, direction) visited then
+        | (start, direction) as head :: rest when
+            inBounds start
+            && (visited |> Set.contains head |> not)
+            ->
+            tiles
+            |> Map.tryFind start
+            |> nextHeading direction
+            |> List.map (step start)
+            |> List.append rest
+            |> travel (Set.add (start, direction) visited)
 
-                travel visited rest
-            else
-                tiles
-                |> Map.tryFind start
-                |> nextHeading direction
-                |> List.map (fun h -> step start h, h)
-                |> List.append rest
-                |> travel (Set.add (start, direction) visited)
+        | _ :: rest -> travel visited rest
 
         | [] -> visited
 
