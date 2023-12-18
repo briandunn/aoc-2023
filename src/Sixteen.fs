@@ -64,50 +64,65 @@ let print (w, h) energized =
     |> printfn "%s"
 
 
+let nextHeading direction tile =
+    match tile with
+    | Some (Splitter Vertical) ->
+        match direction with
+        | E
+        | W -> [ N; S ]
+        | c -> [ c ]
+    | Some (Splitter Horizontal) ->
+        match direction with
+        | N
+        | S -> [ E; W ]
+        | c -> [ c ]
+    | Some (Mirror SWNE) ->
+        match direction with
+        | N -> [ E ]
+        | E -> [ N ]
+        | S -> [ W ]
+        | W -> [ S ]
+    | Some (Mirror NWSE) ->
+        match direction with
+        | N -> [ W ]
+        | E -> [ S ]
+        | S -> [ E ]
+        | W -> [ N ]
+    | None -> [ direction ]
+
+let step (x, y) =
+    function
+    | N -> (x, y - 1)
+    | E -> (x + 1, y)
+    | S -> (x, y + 1)
+    | W -> (x - 1, y)
+
 let one lines =
-    let { tiles = tiles; dims = (w, h) } = parse lines |> Ten.p "parse"
+    let { tiles = tiles; dims = (w, h) } = parse lines
 
-    let rec travel ((x, y) as start) direction visited =
-        let head direction =
-            match direction with
-            | N -> travel (x, y - 1) N
-            | E -> travel (x + 1, y) E
-            | S -> travel (x, y + 1) S
-            | W -> travel (x - 1, y) W
-            <| Set.add (start, direction) visited
+    let rec travel vectors visited =
+        match vectors with
+        | (((x, y) as start), direction) :: rest ->
+            if x < 0
+               || x >= w
+               || y < 0
+               || y >= h
+               || Set.contains (start, direction) visited then
 
-        if x < 0
-           || x >= w
-           || y < 0
-           || y >= h
-           || Set.contains (start, direction) visited then
-            visited
-        else
-            match (Map.tryFind start tiles) with
-            | Some (Splitter Vertical) ->
-                match direction with
-                | E
-                | W -> Set.union (head N) (head S)
-                | c -> head c
-            | Some (Splitter Horizontal) ->
-                match direction with
-                | N
-                | S -> Set.union (head E) (head W)
-                | c -> head c
-            | Some (Mirror SWNE) ->
-                match direction with
-                | N -> head E
-                | E -> head N
-                | S -> head W
-                | W -> head S
-            | Some (Mirror NWSE) ->
-                match direction with
-                | N -> head W
-                | E -> head S
-                | S -> head E
-                | W -> head N
-            | None -> head direction
+                travel rest visited
+            else
+                let vectors =
+                    tiles
+                    |> Map.tryFind start
+                    |> nextHeading direction
+                    |> List.map (fun h -> step start h, h)
+                    |> List.append rest
 
-    travel (0, 0) E Set.empty
+                travel vectors (Set.add (start, direction) visited)
+
+        | [] -> visited
+
+
+    travel [ (0, 0), E ] Set.empty
     |> Set.map fst
     |> Set.count
