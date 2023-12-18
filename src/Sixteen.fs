@@ -53,7 +53,7 @@ let print (w, h) energized =
     seq {
         for y in 0..h do
             for x in 0..w do
-                if List.contains (x, y) energized then
+                if Seq.contains (x, y) energized then
                     "#"
                 else
                     " "
@@ -97,8 +97,8 @@ let step (x, y) =
     | S -> (x, y + 1), S
     | W -> (x - 1, y), W
 
-let one lines =
-    let { tiles = tiles; dims = (w, h) } = parse lines
+let travel start direction grid =
+    let { tiles = tiles; dims = (w, h) } = grid
 
     let inBounds (x, y) = x >= 0 && x < w && y >= 0 && y < h
 
@@ -113,14 +113,44 @@ let one lines =
             |> nextHeading direction
             |> List.map (step start)
             |> List.append rest
-            |> travel (Set.add (start, direction) visited)
+            |> travel (Set.add head visited)
 
         | _ :: rest -> travel visited rest
 
         | [] -> visited
 
 
-    [ (0, 0), E ]
-    |> travel Set.empty
-    |> Set.map fst
-    |> Set.count
+    [ start, direction ] |> travel Set.empty
+
+let one: string seq -> int =
+    parse
+    >> travel (0, 0) E
+    >> Set.map fst
+    >> Set.count
+
+let two lines =
+    let grid = parse lines
+
+    let { dims = (w, h) } = grid
+
+    let map (start, direction) =
+        grid
+        |> travel start direction
+        |> Set.map fst
+        |> Set.count
+
+    seq {
+        for x in 0..w do
+            yield ((x, 0), S)
+
+        for x in 0..w do
+            yield ((x, h - 1), N)
+
+        for y in 0..h do
+            yield ((0, y), E)
+
+        for y in 0..h do
+            yield ((w - 1, y), W)
+    }
+    |> Seq.map map
+    |> Seq.max
