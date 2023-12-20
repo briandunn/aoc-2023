@@ -1,10 +1,5 @@
 module Seventeen
 
-type Steps =
-    | One
-    | Two
-    | Three
-
 type Direction =
     | Left
     | Right
@@ -15,8 +10,6 @@ type Cardinal =
     | S
     | E
     | W
-
-type Move = Direction * Steps
 
 type Coords = int * int
 
@@ -30,20 +23,12 @@ let parse: string seq -> int Grid.Grid = Grid.parse (string >> int)
 let destination grid =
     Array2D.length1 grid - 1, Array2D.length2 grid - 1
 
-let blocks =
-    function
-    | One -> 1
-    | Two -> 2
-    | Three -> 3
-
 let step (x, y) =
     function
     | N -> (x, y - 1)
     | E -> (x + 1, y)
     | S -> (x, y + 1)
     | W -> (x - 1, y)
-
-
 
 let heading heading direction =
     match heading, direction with
@@ -81,21 +66,6 @@ let move
 
 let connected from =
     Seq.choose (move from) [ Left; Straight; Right ]
-
-
-let print grid path =
-    seq {
-        for y in 0 .. Array2D.length2 grid - 1 do
-            for x in 0 .. Array2D.length1 grid - 1 do
-                if Set.contains (x, y) path then
-                    "*"
-                else
-                    Array2D.get grid x y |> string
-
-            "\n"
-    }
-    |> String.concat ""
-    |> printfn "%s"
 
 let inBounds (maxX, maxY) (x, y) =
     x >= 0 && x <= maxX && y >= 0 && y <= maxY
@@ -143,12 +113,14 @@ let one lines =
         |> function
             | { position = position }, weight when position = destination -> weight
             | current, weight ->
-                current
-                |> connected
-                |> Seq.filter isUnvisited
-                |> updateWeights weight weights
-                |> Map.remove current
-                |> loop (Set.add current visited)
+                let weights =
+                    current
+                    |> connected
+                    |> Seq.filter isUnvisited
+                    |> updateWeights weight weights
+                    |> Map.remove current
+
+                loop (Set.add current visited) weights
 
     [ east, weight east
       south, weight south ]
