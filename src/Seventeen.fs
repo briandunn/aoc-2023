@@ -23,61 +23,19 @@ let parse: string seq -> int Grid.Grid = Grid.parse (string >> int)
 let destination grid =
     Array2D.length1 grid - 1, Array2D.length2 grid - 1
 
-let step (x, y) =
-    function
-    | N -> (x, y - 1)
-    | E -> (x + 1, y)
-    | S -> (x, y + 1)
-    | W -> (x - 1, y)
-
-let heading heading direction =
-    match heading, direction with
-    | E, Left -> N
-    | E, Right -> S
-    | S, Left -> E
-    | S, Right -> W
-    | W, Left -> S
-    | W, Right -> N
-    | N, Left -> W
-    | N, Right -> E
-    | heading, Straight -> heading
-
-let move
-    { position = current
-      heading = currentHeading
-      stepCount = stepCount }
-    direction
-    : Crucible option =
-    let stepCount =
-        match direction with
-        | Straight -> stepCount + 1
-        | _ -> 1
-
-    let nextHeading = heading currentHeading direction
-
-    if stepCount > 3 then
-        None
-    else
-        Some(
-            { position = step current nextHeading
-              heading = nextHeading
-              stepCount = stepCount }
-        )
-
-let connected from =
-    Seq.choose (move from) [ Left; Straight; Right ]
+let connected move =
+    Seq.choose move [ Left; Straight; Right ]
 
 let inBounds (maxX, maxY) (x, y) =
     x >= 0 && x <= maxX && y >= 0 && y <= maxY
 
-let one lines =
-    let grid = parse lines
+let minimumHeatLoss move grid =
     let destination = destination grid
     let inBounds = inBounds destination
 
     let connected =
         let filter crucible = inBounds crucible.position
-        connected >> Seq.filter filter
+        move >> connected >> Seq.filter filter
 
     let weight { position = (x, y) } = Array2D.get grid x y
 
@@ -126,3 +84,58 @@ let one lines =
       south, weight south ]
     |> Map.ofList
     |> loop Set.empty
+
+let step (x, y) =
+    function
+    | N -> (x, y - 1)
+    | E -> (x + 1, y)
+    | S -> (x, y + 1)
+    | W -> (x - 1, y)
+
+let heading heading direction =
+    match heading, direction with
+    | E, Left -> N
+    | E, Right -> S
+    | S, Left -> E
+    | S, Right -> W
+    | W, Left -> S
+    | W, Right -> N
+    | N, Left -> W
+    | N, Right -> E
+    | heading, Straight -> heading
+
+let nextCrucible stepCount direction crucible =
+
+    let nextHeading = heading crucible.heading direction
+
+    { stepCount = stepCount
+      heading = nextHeading
+      position = step crucible.position nextHeading }
+
+let one: string seq -> int =
+
+    let move ({ stepCount = stepCount } as crucible) direction =
+        let next stepCount =
+            nextCrucible stepCount direction crucible
+
+        match direction with
+        | Straight when stepCount >= 3 -> None
+        | Straight -> (stepCount + 1) |> next |> Some
+        | _ -> 1 |> next |> Some
+
+    parse >> minimumHeatLoss move
+
+let two: string seq -> int =
+
+    let move ({ stepCount = stepCount } as crucible) direction =
+        let next stepCount =
+            nextCrucible stepCount direction crucible
+
+        match direction with
+        | Straight when stepCount >= 10 -> None
+        | Left
+        | Right when stepCount <= 4 -> None
+        | Straight -> (stepCount + 1) |> next |> Some
+        | _ -> 1 |> next |> Some
+
+    parse >> minimumHeatLoss move
