@@ -18,7 +18,23 @@ type Crucible =
       heading: Cardinal
       stepCount: int }
 
-let parse: string seq -> int Grid.Grid = Grid.parse (string >> int)
+let parse lines =
+
+    let tiles =
+        Map.ofSeq
+        <| seq {
+            for y, line in Seq.indexed lines do
+                for x, c in Seq.indexed line -> (x, y), c |> string |> int
+        }
+
+
+    let keys = Map.keys tiles
+    let max f = keys |> Seq.map f |> Seq.max
+
+    let init y x = Map.find (x, y) tiles
+
+    Array2D.init (max fst + 1) (max snd + 1) init
+
 
 let destination grid =
     Array2D.length1 grid - 1, Array2D.length2 grid - 1
@@ -28,6 +44,34 @@ let connected move =
 
 let inBounds (maxX, maxY) (x, y) =
     x >= 0 && x <= maxX && y >= 0 && y <= maxY
+
+let printPath pathMap last grid =
+    let rec loop head path =
+        match Map.tryFind head pathMap with
+        | Some el -> loop el (el :: path)
+        | None -> path
+
+    let fold acc crucible =
+        Map.add crucible.position crucible.heading acc
+
+    let path = [] |> loop last |> List.fold fold Map.empty
+
+    seq {
+        for x in 0 .. (fst last.position) do
+            for y in 0 .. (snd last.position) do
+                match Map.tryFind (x, y) path with
+                | None -> Array2D.get grid x y |> string
+                | Some heading ->
+                    match heading with
+                    | N -> "^"
+                    | S -> "v"
+                    | E -> ">"
+                    | W -> "<"
+
+            "\n"
+    }
+    |> String.concat ""
+    |> printfn "%s"
 
 let minimumHeatLoss move grid =
     let destination = destination grid
@@ -39,19 +83,6 @@ let minimumHeatLoss move grid =
 
     let weight { position = (x, y) } = Array2D.get grid x y
 
-    let updateWeights currentWeight unvisited =
-        let fold unvisited connected =
-            let nextWeight = currentWeight + weight connected
-
-            let change =
-                Option.map (min nextWeight)
-                >> Option.defaultValue nextWeight
-                >> Some
-
-            Map.change connected change unvisited
-
-        Seq.fold fold unvisited
-
     let east =
         { position = (1, 0)
           heading = E
@@ -62,28 +93,38 @@ let minimumHeatLoss move grid =
           heading = S
           stepCount = 1 }
 
-    let rec loop visited weights =
+    let rec loop visited path weights =
         let isUnvisited crucible = not <| Set.contains crucible visited
 
         weights
         |> Map.toSeq
         |> Seq.minBy snd
         |> function
-            | { position = position }, weight when position = destination -> weight
-            | current, weight ->
-                let weights =
+            | { position = position } as crucible, weight when position = destination ->
+                printPath path crucible grid
+
+                weight
+            | current, currentWeight ->
+                let updateWeights (path, unvisited) connected =
+                    let nextWeight = currentWeight + weight connected
+
+                    Map.tryFind connected unvisited
+                    |> function
+                        | Some previousWeight when previousWeight <= nextWeight -> path, unvisited
+                        | _ -> Map.add connected current path, Map.add connected nextWeight unvisited
+
+                let path, weights =
                     current
                     |> connected
                     |> Seq.filter isUnvisited
-                    |> updateWeights weight weights
-                    |> Map.remove current
+                    |> Seq.fold updateWeights (path, weights)
 
-                loop (Set.add current visited) weights
+                loop (Set.add current visited) path (Map.remove current weights)
 
     [ east, weight east
       south, weight south ]
     |> Map.ofList
-    |> loop Set.empty
+    |> loop Set.empty Map.empty
 
 let step (x, y) =
     function
@@ -134,7 +175,7 @@ let two: string seq -> int =
         match direction with
         | Straight when stepCount >= 10 -> None
         | Left
-        | Right when stepCount <= 4 -> None
+        | Right when stepCount < 4 -> None
         | Straight -> (stepCount + 1) |> next |> Some
         | _ -> 1 |> next |> Some
 
