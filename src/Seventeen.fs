@@ -117,17 +117,17 @@ let one lines =
     let weight { position = (x, y) } = Array2D.get grid x y
 
     let updateWeights
-        (current: Crucible)
+        (currentWeight: int)
         (unvisited: Map<Crucible, int>)
         (connections: Crucible list)
         : Map<Crucible, int> =
         let fold unvisited connected =
             let change =
                 function
-                | None -> Some(weight current + weight connected)
+                | None -> Some(currentWeight + weight connected)
                 | Some currentWeight ->
                     currentWeight
-                    |> min (weight current + weight connected)
+                    |> min (currentWeight + weight connected)
                     |> Some
 
             Map.change connected change unvisited
@@ -144,7 +144,7 @@ let one lines =
           heading = S
           stepCount = 1 }
 
-    let unfold (visited, weights) =
+    let rec loop visited weights =
         let connectedUnvisited node =
             let filter crucible = not (Set.contains crucible visited)
 
@@ -153,37 +153,26 @@ let one lines =
         weights
         |> Map.toList
         |> function
-            | [] -> None
+            | [] -> 0
             | unvisited ->
                 unvisited
                 |> List.minBy snd
-                |> fst
                 |> function
-                    | { position = position } as current when position = destination ->
+                    | { position = position }, weight when position = destination ->
+                        weight
+                    | current, weight ->
                         let unvisited =
                             current
                             |> connectedUnvisited
-                            |> updateWeights current weights
+                            |> updateWeights weight weights
 
-                        Some(unvisited, (Set.empty, Map.empty))
-                    | current ->
-                        let unvisited =
-                            current
-                            |> connectedUnvisited
-                            |> updateWeights current weights
+                        loop (Set.add current visited) (Map.remove current unvisited)
 
-                        Some(unvisited, (Set.add current visited, Map.remove current unvisited))
-
-    Seq.unfold
-        unfold
-        (Set.empty,
-         Map.ofList [ east, weight east
-                      south, weight south ])
-    |> Seq.last
-    |> Map.values |> Seq.toList |> printfn "%A"
-    // |> Map.toSeq
-    // |> Seq.tryFind (fun (crucible, weight) -> crucible.position = destination)
-    // |> printfn "%A"
+    [ east, weight east
+      south, weight south ]
+    |> Map.ofList
+    |> loop Set.empty
+    |> printfn "%A"
 
 
 
