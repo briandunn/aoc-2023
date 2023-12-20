@@ -80,7 +80,7 @@ let move
         )
 
 let connected from =
-    List.choose (move from) [ Left; Straight; Right ]
+    Seq.choose (move from) [ Left; Straight; Right ]
 
 
 let print grid path =
@@ -100,39 +100,29 @@ let print grid path =
 let inBounds (maxX, maxY) (x, y) =
     x >= 0 && x <= maxX && y >= 0 && y <= maxY
 
-// too much state in the crucible.
-// Need to work with just the position.
-// rather than keeping step count and heading, treat all the places you could get in 1 move as connected.
-// their weight is the sum of the weights of the places you've been so far.
-// so the trick is how to get the weight of each potential next place.
 let one lines =
     let grid = parse lines
     let destination = destination grid
     let inBounds = inBounds destination
 
     let connected =
-        connected
-        >> List.filter (fun crucible -> inBounds crucible.position)
+        let filter crucible = inBounds crucible.position
+        connected >> Seq.filter filter
 
     let weight { position = (x, y) } = Array2D.get grid x y
 
-    let updateWeights
-        (currentWeight: int)
-        (unvisited: Map<Crucible, int>)
-        (connections: Crucible list)
-        : Map<Crucible, int> =
+    let updateWeights currentWeight unvisited =
         let fold unvisited connected =
+            let nextWeight = currentWeight + weight connected
+
             let change =
-                function
-                | None -> Some(currentWeight + weight connected)
-                | Some currentWeight ->
-                    currentWeight
-                    |> min (currentWeight + weight connected)
-                    |> Some
+                Option.map (min nextWeight)
+                >> Option.defaultValue nextWeight
+                >> Some
 
             Map.change connected change unvisited
 
-        List.fold fold unvisited connections
+        Seq.fold fold unvisited
 
     let east =
         { position = (1, 0)
@@ -145,35 +135,22 @@ let one lines =
           stepCount = 1 }
 
     let rec loop visited weights =
-        let connectedUnvisited node =
-            let filter crucible = not (Set.contains crucible visited)
-
-            node |> connected |> List.filter filter
+        let isUnvisited crucible = not <| Set.contains crucible visited
 
         weights
-        |> Map.toList
+        |> Map.toSeq
+        |> Seq.minBy snd
         |> function
-            | [] -> 0
-            | unvisited ->
-                unvisited
-                |> List.minBy snd
-                |> function
-                    | { position = position }, weight when position = destination ->
-                        weight
-                    | current, weight ->
-                        let unvisited =
-                            current
-                            |> connectedUnvisited
-                            |> updateWeights weight weights
-
-                        loop (Set.add current visited) (Map.remove current unvisited)
+            | { position = position }, weight when position = destination -> weight
+            | current, weight ->
+                current
+                |> connected
+                |> Seq.filter isUnvisited
+                |> updateWeights weight weights
+                |> Map.remove current
+                |> loop (Set.add current visited)
 
     [ east, weight east
       south, weight south ]
     |> Map.ofList
     |> loop Set.empty
-    |> printfn "%A"
-
-
-
-    0
