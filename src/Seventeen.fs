@@ -27,13 +27,12 @@ let parse lines =
                 for x, c in Seq.indexed line -> (x, y), c |> string |> int
         }
 
-
     let keys = Map.keys tiles
-    let max f = keys |> Seq.map f |> Seq.max
+    let length f = keys |> Seq.map f |> Seq.max |> (+) 1
 
     let init y x = Map.find (x, y) tiles
 
-    Array2D.init (max fst + 1) (max snd + 1) init
+    Array2D.init (length snd) (length fst) init
 
 
 let destination grid =
@@ -42,8 +41,10 @@ let destination grid =
 let connected move =
     Seq.choose move [ Left; Straight; Right ]
 
-let inBounds (maxX, maxY) (x, y) =
-    x >= 0 && x <= maxX && y >= 0 && y <= maxY
+let inBounds grid (x, y) =
+    let maxX = Array2D.length1 grid
+    let maxY = Array2D.length2 grid
+    x >= 0 && x < maxX && y >= 0 && y < maxY
 
 let printPath pathMap last grid =
     let rec loop head path =
@@ -54,7 +55,7 @@ let printPath pathMap last grid =
     let fold acc crucible =
         Map.add crucible.position crucible.heading acc
 
-    let path = [] |> loop last |> List.fold fold Map.empty
+    let path = [ last ] |> loop last |> List.fold fold Map.empty
 
     seq {
         for x in 0 .. (fst last.position) do
@@ -73,9 +74,8 @@ let printPath pathMap last grid =
     |> String.concat ""
     |> printfn "%s"
 
-let minimumHeatLoss move grid =
-    let destination = destination grid
-    let inBounds = inBounds destination
+let minimumHeatLoss move isDone grid =
+    let inBounds = inBounds grid
 
     let connected =
         let filter crucible = inBounds crucible.position
@@ -96,42 +96,46 @@ let minimumHeatLoss move grid =
     let rec loop visited path weights =
         let isUnvisited crucible = not <| Set.contains crucible visited
 
-        weights
-        |> Map.toSeq
-        |> Seq.minBy snd
-        |> function
-            | { position = position } as crucible, weight when position = destination ->
-                printPath path crucible grid
+        if Map.isEmpty weights then
+            None
+        else
+            weights
+            |> Map.toSeq
+            |> Seq.minBy snd
+            |> function
+                // | { position = position; stepCount = stepCount } as crucible, weight when position = destination && stepCount >= 4 ->
+                | crucible, weight when isDone crucible ->
+                    printPath path crucible grid
 
-                weight
-            | current, currentWeight ->
-                let updateWeights (path, unvisited) connected =
-                    let nextWeight = currentWeight + weight connected
+                    Some weight
+                | current, currentWeight ->
+                    let updateWeights (path, unvisited) connected =
+                        let nextWeight = currentWeight + weight connected
 
-                    Map.tryFind connected unvisited
-                    |> function
-                        | Some previousWeight when previousWeight <= nextWeight -> path, unvisited
-                        | _ -> Map.add connected current path, Map.add connected nextWeight unvisited
+                        Map.tryFind connected unvisited
+                        |> function
+                            | Some previousWeight when previousWeight <= nextWeight -> path, unvisited
+                            | _ -> Map.add connected current path, Map.add connected nextWeight unvisited
 
-                let path, weights =
-                    current
-                    |> connected
-                    |> Seq.filter isUnvisited
-                    |> Seq.fold updateWeights (path, weights)
+                    let path, weights =
+                        current
+                        |> connected
+                        |> Seq.filter isUnvisited
+                        |> Seq.fold updateWeights (path, weights)
 
-                loop (Set.add current visited) path (Map.remove current weights)
+                    loop (Set.add current visited) path (Map.remove current weights)
 
     [ east, weight east
       south, weight south ]
     |> Map.ofList
     |> loop Set.empty Map.empty
 
-let step (x, y) =
+let step n (x, y) =
     function
-    | N -> (x, y - 1)
-    | E -> (x + 1, y)
-    | S -> (x, y + 1)
-    | W -> (x - 1, y)
+    | N -> (x, y - n)
+    | E -> (x + n, y)
+    | S -> (x, y + n)
+    | W -> (x - n, y)
 
 let heading heading direction =
     match heading, direction with
@@ -145,15 +149,21 @@ let heading heading direction =
     | N, Right -> E
     | heading, Straight -> heading
 
-let nextCrucible stepCount direction crucible =
+let nextCrucible steps direction crucible =
 
     let nextHeading = heading crucible.heading direction
 
+    let stepCount =
+        match direction with
+        | Straight -> crucible.stepCount + steps
+        | _ -> steps
+
+
     { stepCount = stepCount
       heading = nextHeading
-      position = step crucible.position nextHeading }
+      position = step steps crucible.position nextHeading }
 
-let one: string seq -> int =
+let one lines =
 
     let move ({ stepCount = stepCount } as crucible) direction =
         let next stepCount =
@@ -161,12 +171,18 @@ let one: string seq -> int =
 
         match direction with
         | Straight when stepCount >= 3 -> None
-        | Straight -> (stepCount + 1) |> next |> Some
         | _ -> 1 |> next |> Some
 
-    parse >> minimumHeatLoss move
+    let grid = parse lines
+    let destination = destination grid
 
-let two: string seq -> int =
+    grid |> minimumHeatLoss move (fun {position = position} -> position = destination ) |> Option.defaultValue -1
+
+
+// only allow nav 4 steps
+// have to count the cost of the nav as the sum of 4 tiles.
+// would be easier if cost was stored in crucible
+let two lines =
 
     let move ({ stepCount = stepCount } as crucible) direction =
         let next stepCount =
@@ -176,7 +192,11 @@ let two: string seq -> int =
         | Straight when stepCount >= 10 -> None
         | Left
         | Right when stepCount < 4 -> None
-        | Straight -> (stepCount + 1) |> next |> Some
+        | Straight when stepCount >= 4 -> 1 |> next |> Some
+        // | Straight -> 4 |> next |> Some
         | _ -> 1 |> next |> Some
 
-    parse >> minimumHeatLoss move
+    let grid = parse lines
+    let destination = destination grid
+
+    grid |> minimumHeatLoss move (fun {position = position; stepCount = stepCount} -> position = destination && stepCount >= 4 ) |> Option.defaultValue -1
