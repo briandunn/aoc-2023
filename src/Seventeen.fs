@@ -74,7 +74,7 @@ let printPath pathMap last grid =
     |> String.concat ""
     |> printfn "%s"
 
-let minimumHeatLoss move isDone grid =
+let minimumHeatLossF move isDone grid =
     let inBounds = inBounds grid
 
     let connected =
@@ -130,6 +130,75 @@ let minimumHeatLoss move isDone grid =
     |> Map.ofList
     |> loop Set.empty Map.empty
 
+let minimumHeatLoss move isDone grid =
+    let inBounds = inBounds grid
+
+    let connected =
+        let filter crucible = inBounds crucible.position
+        move >> connected >> Seq.filter filter
+
+    let weight { position = (x, y) } = Array2D.get grid x y
+
+    let east =
+        { position = (1, 0)
+          heading = E
+          stepCount = 1 }
+
+    let south =
+        { position = (0, 1)
+          heading = S
+          stepCount = 1 }
+
+    let initialState =
+        [ east, weight east
+          south, weight south ]
+
+    let mutable queue = System.Collections.Generic.PriorityQueue<Crucible, int>()
+
+    let tryDequeue () =
+        match queue.TryDequeue() with
+        | true, el, w -> Some(el, w)
+        | _ -> None
+
+    let enqueue crucible weight = queue.Enqueue(crucible, weight)
+
+    initialState |> List.iter queue.Enqueue
+
+    let rec loop visited path weights =
+        let isUnvisited crucible = not <| Set.contains crucible visited
+
+        match tryDequeue () with
+        | Some (crucible, weight) when isDone crucible ->
+            printPath path crucible grid
+
+            Some weight
+        | Some (current, currentWeight) ->
+            let updateWeights (path, unvisited) connected =
+                let nextWeight = currentWeight + weight connected
+
+                Map.tryFind connected unvisited
+                |> function
+                    | Some previousWeight when previousWeight <= nextWeight -> path, unvisited
+                    | _ ->
+                        enqueue connected nextWeight
+                        Map.add connected current path, Map.add connected nextWeight unvisited
+
+            let path, weights =
+                current
+                |> connected
+                |> Seq.filter isUnvisited
+                |> Seq.fold updateWeights (path, weights)
+
+            loop (Set.add current visited) path weights
+
+        | None -> None
+
+    initialState
+    |> Map.ofList
+    |> loop Set.empty Map.empty
+
+
+
 let step n (x, y) =
     function
     | N -> (x, y - n)
@@ -176,7 +245,9 @@ let one lines =
     let grid = parse lines
     let destination = destination grid
 
-    grid |> minimumHeatLoss move (fun {position = position} -> position = destination ) |> Option.defaultValue -1
+    grid
+    |> minimumHeatLoss move (fun { position = position } -> position = destination)
+    |> Option.defaultValue -1
 
 
 // only allow nav 4 steps
@@ -199,4 +270,9 @@ let two lines =
     let grid = parse lines
     let destination = destination grid
 
-    grid |> minimumHeatLoss move (fun {position = position; stepCount = stepCount} -> position = destination && stepCount >= 4 ) |> Option.defaultValue -1
+    grid
+    |> minimumHeatLoss
+        move
+        (fun { position = position
+               stepCount = stepCount } -> position = destination && stepCount >= 4)
+    |> Option.defaultValue -1
