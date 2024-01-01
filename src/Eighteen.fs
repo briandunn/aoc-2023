@@ -74,10 +74,6 @@ let columns: (int * int) seq -> (int * int Set) seq =
 
     Seq.groupBy fst >> Seq.map map
 
-type Feature =
-    | Run of int Set
-    | Cross
-
 let crossings: (int * int Set) seq -> (int * (int list)) seq =
     let fold left right (prev, crossings) =
         function
@@ -104,41 +100,21 @@ let isEven n = n % 2 = 0
 let between start stop = range (start + 1) (stop - 1) id
 
 let fill border =
-
-    // there isn't enough information in a single column.
-    // if a wall segment column leaves the way it came it did not cross the path counts as 0 or 2
-    // if a wall segment crosses the column it counts as 1
-
-    // turn a column into runs and crosses - need a sliding window of three columns
-
-
-    let columns = columns border
-
-    let crossings = crossings columns |> Ten.p "crossings"
-
-    let rec loop =
+    let rec loop runs =
         function
-        | head :: neck :: rest when rest |> List.length |> isEven -> (between head neck) @ loop (neck :: rest)
-        | _ :: rest -> loop rest
-        | [] -> []
-
+        | head :: neck :: rest when rest |> List.length |> isEven -> loop ((between head neck) @ runs) (neck :: rest)
+        | _ :: rest -> loop runs rest
+        | [] -> runs
 
     let map (x, ys) =
         let map y = (x, y)
-        ys |> loop |> List.map map |> set
+        ys |> loop [] |> List.map map |> set
 
-    crossings
+    border
+    |> columns
+    |> crossings
     |> Seq.map map
     |> Set.unionMany
     |> Set.union border
-    |> Set.toList
 
-let one lines =
-    parse lines
-    |> Seq.toList
-    |> border
-    |> fill
-    |> print
-    |> printfn "%s"
-
-    0
+let one: string seq -> int = parse >> Seq.toList >> border >> fill >> Set.count
