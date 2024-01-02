@@ -173,7 +173,7 @@ let openRanges =
     |> Seq.map (fun c -> c, (1, 4000))
     |> Map.ofSeq
 
-let acceptableRanges workflow =
+let rangesWithDest dest workflow =
     let fold (current, accepted) rule =
 
         let apply inverted =
@@ -192,21 +192,34 @@ let acceptableRanges workflow =
             Map.change rule.category (Option.map (change op)) current
 
         match rule.dest with
-        | Accept -> openRanges, (apply false) :: accepted
+        | d when d = dest -> openRanges, (apply false) :: accepted
         | _ -> (apply true), accepted
 
     let current, accepted = workflow.rules |> Seq.fold fold (openRanges, [])
 
     match workflow.otherwise with
-    | Accept -> Some (workflow.name, current :: accepted)
+    | d when d = dest -> Some (workflow.name, current :: accepted)
     | _ when accepted <> [] -> Some (workflow.name, accepted)
     | _ -> None
+
+
+// need individual paths
+let rec traceBack workflows (name, acceptableRanges) =
+  let traceBack name  =
+    workflows
+    |> Seq.choose (rangesWithDest (Jump name) )
+    |> Seq.map (traceBack workflows)
+    |> Seq.concat
+    |> Seq.toList
+
+  [for range in acceptableRanges do (name, range)::(traceBack name)] |> List.concat
 
 let two lines =
     let workflows, _ = lines |> Seq.toArray |> parse
 
     workflows
-    |> Seq.choose acceptableRanges
+    |> Seq.choose (rangesWithDest Accept)
+    |> Seq.map (traceBack workflows)
     |> Seq.iter (printfn "%A")
 
     0
