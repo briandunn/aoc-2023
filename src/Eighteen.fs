@@ -118,3 +118,46 @@ let fill border =
     |> Set.union border
 
 let one: string seq -> int = parse >> Seq.toList >> border >> fill >> Set.count
+
+
+// Gotta do this totally differently - counting columns that repeat and multiplying rather than roster
+let two: string seq -> int =
+    // the trick would be to skip columns that don't change and just count them.
+    let parse lines =
+        let parse =
+            String.split ' '
+            >> Seq.last
+            >> Seq.skip 2
+            >> Seq.rev
+            >> Seq.tail
+            >> Seq.toList
+            >> function
+                | instruction :: number ->
+                    let meters =
+                        System.Convert.ToInt32(
+                            number
+                            |> Seq.rev
+                            |> Seq.map string
+                            |> String.concat "",
+                            16
+                        )
+
+                    let direction =
+                        match instruction with
+                        | '0' -> Right
+                        | '1' -> Down
+                        | '2' -> Left
+                        | '3' -> Up
+                        | _ -> failwith "unknown direction"
+
+                    (direction, meters)
+
+                | _ -> failwith "unknown direction"
+
+
+        seq {
+            for line in lines do
+                parse line
+        }
+
+    parse >> Seq.toList >> border >> fill >> Set.count
