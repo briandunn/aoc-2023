@@ -115,7 +115,54 @@ let parse lines =
 
     workflows, parts
 
+let applyWorkflow workflow part =
+    let applyRule rule =
+        let value = Map.find rule.category part
+
+        match rule.op with
+        | LT when value < rule.value -> Some rule.dest
+        | GT when value > rule.value -> Some rule.dest
+        | _ -> None
+
+    let rec applyRules =
+        function
+        | [] -> workflow.otherwise
+        | head :: rest ->
+            match applyRule head with
+            | Some dest -> dest
+            | None -> applyRules rest
+
+    applyRules workflow.rules
+
+let rec isAccepted start workflows part =
+    let workflow = Map.find start workflows
+
+    match applyWorkflow workflow part with
+    | Accept -> true
+    | Reject -> false
+    | Jump label -> isAccepted label workflows part
+
 let one lines =
-    let workflows, parts = lines |> parse
-    parts |> Seq.iter (printfn "%A")
-    0
+    let workflows, parts = lines |> Seq.toArray |> parse
+
+    let jumpTargets =
+        workflows
+        |> Seq.map (fun workflow ->
+            (workflow.otherwise
+             :: (List.map (fun ({ dest = dest }) -> dest) workflow.rules))
+            |> List.choose (function
+                | Jump label -> Some label
+                | _ -> None))
+        |> Seq.concat
+
+    workflows
+    |> Seq.filter (fun ({ name = name }) -> not (jumpTargets |> Seq.contains name))
+    |> Seq.tryExactlyOne
+    |> function
+        | Some ({ name = name }) ->
+            parts
+            |> Seq.filter (
+                isAccepted name (Map.ofSeq (Seq.map (fun ({ name = name } as workflow) -> name, workflow) workflows))
+            )
+            |> Seq.sumBy (Map.values >> Seq.sum)
+        | None -> failwith "no starting point"
