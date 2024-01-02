@@ -166,3 +166,47 @@ let one lines =
             )
             |> Seq.sumBy (Map.values >> Seq.sum)
         | None -> failwith "no starting point"
+
+
+let openRanges =
+    [ X; M; A; S ]
+    |> Seq.map (fun c -> c, (1, 4000))
+    |> Map.ofSeq
+
+let acceptableRanges workflow =
+    let fold (current, accepted) rule =
+
+        let apply inverted =
+            let change op (min, max) =
+                match op with
+                | LT when min < rule.value -> (min, rule.value - 1)
+                | GT when max > rule.value -> (rule.value + 1, max)
+                | _ -> (min, max)
+
+            let op =
+                match inverted, rule.op with
+                | true, LT -> GT
+                | true, GT -> LT
+                | _, op -> op
+
+            Map.change rule.category (Option.map (change op)) current
+
+        match rule.dest with
+        | Accept -> openRanges, (apply false) :: accepted
+        | _ -> (apply true), accepted
+
+    let current, accepted = workflow.rules |> Seq.fold fold (openRanges, [])
+
+    match workflow.otherwise with
+    | Accept -> Some (workflow.name, current :: accepted)
+    | _ when accepted <> [] -> Some (workflow.name, accepted)
+    | _ -> None
+
+let two lines =
+    let workflows, _ = lines |> Seq.toArray |> parse
+
+    workflows
+    |> Seq.choose acceptableRanges
+    |> Seq.iter (printfn "%A")
+
+    0
