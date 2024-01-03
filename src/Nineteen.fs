@@ -177,19 +177,15 @@ let rangesWithDest dest workflow =
     let fold (current, accepted) rule =
 
         let apply inverted =
-            let change op (min, max) =
-                match op with
-                | LT when min < rule.value -> (min, rule.value - 1)
-                | GT when max > rule.value -> (rule.value + 1, max)
+            let change (min, max) =
+                match rule.op, inverted with
+                | LT, false when min < rule.value -> (min, rule.value - 1)
+                | GT, false when max > rule.value -> (rule.value + 1, max)
+                | LT, true when min < rule.value -> (rule.value, max)
+                | GT, true when max > rule.value -> (min, rule.value)
                 | _ -> (min, max)
 
-            let op =
-                match inverted, rule.op with
-                | true, LT -> GT
-                | true, GT -> LT
-                | _, op -> op
-
-            Map.change rule.category (Option.map (change op)) current
+            Map.change rule.category (Option.map change) current
 
         match rule.dest with
         | d when d = dest -> openRanges, (apply false) :: accepted
@@ -214,14 +210,45 @@ let rec traceBack workflows ((name, acceptableRanges): string * (Map<Category, (
                       for l in loop n -> (n, range) :: l ]
 
     [ for range in acceptableRanges do
-        for l in loop name -> (name, range) :: l ]
+          for l in loop name -> (name, range) :: l ]
+
+let collapseRanges =
+    let reduce ranges ranges' =
+        let map category =
+            category,
+            [ ranges; ranges' ]
+            |> List.map (Map.find category)
+            |> List.reduce (fun (start, stop) (start', stop') -> max start start', min stop stop')
+
+        [ X; M; A; S ] |> List.map map |> Map.ofList
+
+    Seq.map snd >> Seq.reduce reduce
+
+let countPermutations ranges =
+    let map category =
+        let (start, stop) = Map.find category ranges
+        stop - start + 1 |> int64
+
+    [ X; M; A; S ] |> List.map map |> List.reduce (*)
 
 let two lines =
     let workflows, _ = lines |> Seq.toArray |> parse
 
-    workflows
-    |> Seq.choose (rangesWithDest Accept)
-    |> Seq.map (traceBack <| Seq.toList workflows)
-    |> Seq.iter (printfn "%A")
+    let paths =
+        workflows
+        |> Seq.choose (rangesWithDest Accept)
+        |> Seq.map (traceBack <| Seq.toList workflows)
+        |> Seq.concat
+
+    paths |> Seq.concat |> Seq.groupBy fst |> printfn "%A"
+
+    paths
+    |> Seq.map collapseRanges |> Seq.iter (printfn "%A")
+    // |> Seq.map countPermutations
+    // |> Seq.sum
+    // |> printfn "%d"
+
+    // 193365980426613
+    // 167409079868000
 
     0
