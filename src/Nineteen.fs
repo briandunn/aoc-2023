@@ -198,8 +198,6 @@ let rangesWithDest dest workflow =
     | _ when accepted <> [] -> Some(workflow.name, accepted)
     | _ -> None
 
-
-// need individual paths
 let rec traceBack workflows ((name, acceptableRanges): string * (Map<Category, (int * int)> list)) =
     let rec loop name =
         match List.choose (rangesWithDest (Jump name)) workflows with
@@ -227,7 +225,7 @@ let collapseRanges =
 let countPermutations ranges =
     let map category =
         let (start, stop) = Map.find category ranges
-        stop - start + 1 |> int64
+        (stop - start) + 1 |> int64
 
     [ X; M; A; S ] |> List.map map |> List.reduce (*)
 
@@ -243,10 +241,25 @@ let two lines =
     paths |> Seq.concat |> Seq.groupBy fst |> printfn "%A"
 
     paths
-    |> Seq.map collapseRanges |> Seq.iter (printfn "%A")
-    // |> Seq.map countPermutations
-    // |> Seq.sum
-    // |> printfn "%d"
+    |> Seq.map collapseRanges
+    // FIXME: find and remove overlap?
+
+    [
+       [(X, (1, 4000)); (M, (2091, 4000)); (A, (2006, 4000)); (S, (1, 1350))]
+       [(X, (1, 4000)); (M, (1, 838)); (A, (1, 1716)); (S, (1351, 2770))]
+       [(X, (1, 4000)); (M, (1, 4000)); (A, (1, 4000)); (S, (2771, 3448))]
+      //  [(X, (1, 4000)); (M, (1549, 4000)); (A, (1, 4000)); (S, (2771, 3448))]
+       [(X, (1, 2440)); (M, (1, 2090)); (A, (2006, 4000)); (S, (537, 1350))]
+       [(X, (1, 4000)); (M, (1, 4000)); (A, (1, 4000)); (S, (3449, 4000))]
+       [(X, (1, 1415)); (M, (1, 4000)); (A, (1, 2005)); (S, (1, 1350))]
+       [(X, (2663, 4000)); (M, (1, 4000)); (A, (1, 2005)); (S, (1, 1350))]
+       [(X, (1, 4000)); (M, (839, 1800)); (A, (1, 4000)); (S, (1351, 2770))]
+
+    ]
+    |> Seq.map Map.ofList
+    |> Seq.map countPermutations
+    |> Seq.sum
+    |> printfn "%d"
 
     // 193365980426613
     // 167409079868000
