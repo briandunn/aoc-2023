@@ -198,28 +198,31 @@ let rangesWithDest dest workflow =
     let current, accepted = workflow.rules |> Seq.fold fold (openRanges, [])
 
     match workflow.otherwise with
-    | d when d = dest -> Some (workflow.name, current :: accepted)
-    | _ when accepted <> [] -> Some (workflow.name, accepted)
+    | d when d = dest -> Some(workflow.name, current :: accepted)
+    | _ when accepted <> [] -> Some(workflow.name, accepted)
     | _ -> None
 
 
 // need individual paths
-let rec traceBack workflows (name, acceptableRanges) =
-  let traceBack name  =
-    workflows
-    |> Seq.choose (rangesWithDest (Jump name) )
-    |> Seq.map (traceBack workflows)
-    |> Seq.concat
-    |> Seq.toList
+let traceBack workflows ((name, acceptableRanges): string * (Map<Category, (int * int)> list)) =
+    printfn "%A" name
 
-  [for range in acceptableRanges do (name, range)::(traceBack name)] |> List.concat
+    let rec loop name range =
+        match List.choose (rangesWithDest (Jump name)) workflows with
+        | [] -> [ [] ]
+        | sources ->
+            [ for n, ranges in sources do
+                  for range in ranges do
+                      for l in loop n range -> n :: l ]
+
+    [ for range in acceptableRanges -> (loop name range) ]
 
 let two lines =
     let workflows, _ = lines |> Seq.toArray |> parse
 
     workflows
     |> Seq.choose (rangesWithDest Accept)
-    |> Seq.map (traceBack workflows)
+    |> Seq.map (traceBack <| Seq.toList workflows)
     |> Seq.iter (printfn "%A")
 
     0
