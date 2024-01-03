@@ -26,6 +26,10 @@ type Workflow =
       rules: Rule list
       otherwise: Dest }
 
+type Part = Map<Category, int>
+
+type PartRange = Map<Category, int * int>
+
 let parse lines =
     let parseDest =
         function
@@ -168,100 +172,60 @@ let one lines =
         | None -> failwith "no starting point"
 
 
-let openRanges =
+let openPartRange: PartRange =
     [ X; M; A; S ]
     |> Seq.map (fun c -> c, (1, 4000))
     |> Map.ofSeq
 
-let rangesWithDest dest workflow =
-    let fold (current, accepted) rule =
-
-        let apply inverted =
-            let change (min, max) =
-                match rule.op, inverted with
-                | LT, false when min < rule.value -> (min, rule.value - 1)
-                | GT, false when max > rule.value -> (rule.value + 1, max)
-                | LT, true when min < rule.value -> (rule.value, max)
-                | GT, true when max > rule.value -> (min, rule.value)
-                | _ -> (min, max)
-
-            Map.change rule.category (Option.map change) current
-
-        match rule.dest with
-        | d when d = dest -> openRanges, (apply false) :: accepted
-        | _ -> (apply true), accepted
-
-    let current, accepted = workflow.rules |> Seq.fold fold (openRanges, [])
-
-    match workflow.otherwise with
-    | d when d = dest -> Some(workflow.name, current :: accepted)
-    | _ when accepted <> [] -> Some(workflow.name, accepted)
-    | _ -> None
-
-let rec traceBack workflows ((name, acceptableRanges): string * (Map<Category, (int * int)> list)) =
-    let rec loop name =
-        match List.choose (rangesWithDest (Jump name)) workflows with
-        | [] -> [ [] ]
-        | sources ->
-            [ for n, ranges in sources do
-                  for range in ranges do
-                      for l in loop n -> (n, range) :: l ]
-
-    [ for range in acceptableRanges do
-          for l in loop name -> (name, range) :: l ]
-
-let collapseRanges =
-    let reduce ranges ranges' =
-        let map category =
-            category,
-            [ ranges; ranges' ]
-            |> List.map (Map.find category)
-            |> List.reduce (fun (start, stop) (start', stop') -> max start start', min stop stop')
-
-        [ X; M; A; S ] |> List.map map |> Map.ofList
-
-    Seq.map snd >> Seq.reduce reduce
-
-let countPermutations ranges =
+let countPermutations partRange =
     let map category =
-        let (start, stop) = Map.find category ranges
-        (stop - start) + 1 |> int64
+        let (start, stop) = Map.find category partRange
+        (stop - start) + 1 |> bigint
 
     [ X; M; A; S ] |> List.map map |> List.reduce (*)
+
+let adjustRanges rule partRange inverted =
+    let change (min, max) =
+        match rule.op, inverted with
+        | LT, false when min < rule.value -> (min, rule.value - 1)
+        | GT, false when max > rule.value -> (rule.value + 1, max)
+        | LT, true when min < rule.value -> (rule.value, max)
+        | GT, true when max > rule.value -> (min, rule.value)
+        | _ -> (min, max)
+
+    Map.change rule.category (Option.map change) partRange
+
+let totalCombinations workflows =
+    let rec totalCombinations partRange =
+        let follow partRange =
+            function
+            | Accept -> countPermutations partRange
+            | Reject -> bigint 0
+            | Jump name -> totalCombinations partRange (Map.tryFind name workflows)
+
+        let applyRule rule workflow =
+            totalCombinations (adjustRanges rule partRange true) (Some workflow)
+            + follow (adjustRanges rule partRange false) rule.dest
+
+        function
+        | Some ({ rules = []; otherwise = otherwise }) -> follow partRange otherwise
+        | Some ({ rules = rule :: rest } as workflow) -> applyRule rule { workflow with rules = rest }
+        | None -> bigint 0
+
+    totalCombinations
+
 
 let two lines =
     let workflows, _ = lines |> Seq.toArray |> parse
 
-    let paths =
+    let workflowMap =
         workflows
-        |> Seq.choose (rangesWithDest Accept)
-        |> Seq.map (traceBack <| Seq.toList workflows)
-        |> Seq.concat
+        |> Seq.map (fun wf -> wf.name, wf)
+        |> Map.ofSeq
 
-    paths |> Seq.concat |> Seq.groupBy fst |> printfn "%A"
-
-    paths
-    |> Seq.map collapseRanges
-    // FIXME: find and remove overlap?
-
-    [
-       [(X, (1, 4000)); (M, (2091, 4000)); (A, (2006, 4000)); (S, (1, 1350))]
-       [(X, (1, 4000)); (M, (1, 838)); (A, (1, 1716)); (S, (1351, 2770))]
-       [(X, (1, 4000)); (M, (1, 4000)); (A, (1, 4000)); (S, (2771, 3448))]
-      //  [(X, (1, 4000)); (M, (1549, 4000)); (A, (1, 4000)); (S, (2771, 3448))]
-       [(X, (1, 2440)); (M, (1, 2090)); (A, (2006, 4000)); (S, (537, 1350))]
-       [(X, (1, 4000)); (M, (1, 4000)); (A, (1, 4000)); (S, (3449, 4000))]
-       [(X, (1, 1415)); (M, (1, 4000)); (A, (1, 2005)); (S, (1, 1350))]
-       [(X, (2663, 4000)); (M, (1, 4000)); (A, (1, 2005)); (S, (1, 1350))]
-       [(X, (1, 4000)); (M, (839, 1800)); (A, (1, 4000)); (S, (1351, 2770))]
-
-    ]
-    |> Seq.map Map.ofList
-    |> Seq.map countPermutations
-    |> Seq.sum
-    |> printfn "%d"
-
-    // 193365980426613
-    // 167409079868000
+    workflowMap
+    |> Map.tryFind "in"
+    |> totalCombinations workflowMap openPartRange
+    |> printfn "%A"
 
     0
