@@ -204,18 +204,17 @@ let rangesWithDest dest workflow =
 
 
 // need individual paths
-let traceBack workflows ((name, acceptableRanges): string * (Map<Category, (int * int)> list)) =
-    printfn "%A" name
-
-    let rec loop name range =
+let rec traceBack workflows ((name, acceptableRanges): string * (Map<Category, (int * int)> list)) =
+    let rec loop name =
         match List.choose (rangesWithDest (Jump name)) workflows with
         | [] -> [ [] ]
         | sources ->
             [ for n, ranges in sources do
                   for range in ranges do
-                      for l in loop n range -> n :: l ]
+                      for l in loop n -> (n, range) :: l ]
 
-    [ for range in acceptableRanges -> (loop name range) ]
+    [ for range in acceptableRanges do
+        for l in loop name -> (name, range) :: l ]
 
 let two lines =
     let workflows, _ = lines |> Seq.toArray |> parse
