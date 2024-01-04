@@ -122,6 +122,7 @@ let pushButton =
 
     loop []
 
+let level { level = level } = level
 let one lines =
     let modules =
         seq { for m in parse lines -> m.name, m }
@@ -139,7 +140,7 @@ let one lines =
     |> Seq.scan scan ([], modules)
     |> Seq.map fst
     |> Seq.concat
-    |> Seq.countBy (fun { level = level } -> level)
+    |> Seq.countBy level
     |> Ten.p "levels"
     |> Seq.map snd
     |> Seq.reduce (*)
