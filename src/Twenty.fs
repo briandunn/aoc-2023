@@ -2,9 +2,13 @@ module Twenty
 
 type Broadcaster = string list
 
+type Level =
+    | High
+    | Low
+
 type FlipFlop = { state: bool }
 
-type Conjunction = { inputStates: Map<string, bool> }
+type Conjunction = { inputStates: Map<string, Level> }
 
 type ModuleState =
     | FlipFlop of FlipFlop
@@ -20,8 +24,9 @@ type InputLine =
     | Module of Module
 
 type Pulse =
-    | High
-    | Low
+    { src: string
+      dest: string
+      level: Level }
 
 let parse: string seq -> Broadcaster * Map<string, Module> =
     let buildModule moduleType name destinations =
@@ -91,42 +96,61 @@ let initializeConjunctions modules =
         let change: Module -> Module =
             function
             | { state = Conjunction _ } as m ->
-                { m with state = Conjunction { inputStates = [ for i in inputs -> i, false ] |> Map.ofList } }
+                { m with state = Conjunction { inputStates = [ for i in inputs -> i, Low ] |> Map.ofList } }
             | m -> m
 
         Map.change name (Option.map change) acc
 
     conjunctionInputs |> Map.fold fold modules
 
-let one lines =
-    let broadcaster, modules = parse lines
+let send m level =
+    [ for dest in m.outputs ->
+          { src = m.name
+            level = level
+            dest = dest } ]
 
-    let modules = initializeConjunctions modules
-
-    modules |> Map.iter (printfn "%A %A")
-
-    let rec loop (modules: Map<string, Module>) pulses =
+let pushButton broadcaster modules =
+    let rec loop history (modules: Map<string, Module>) pulses =
         match pulses with
-        | [] -> []
-        | (dest, pulse) as head :: rest ->
+        | [] -> history, modules
+        | { dest = dest
+            level = pulse
+            src = src } as head :: rest ->
             match Map.find dest modules with
             | { state = FlipFlop { state = state } } as m ->
                 match pulse with
-                | High -> head :: loop modules rest
+                | High -> loop (head :: history) modules rest
                 | Low ->
                     let m = { m with state = FlipFlop { state = not state } }
                     let modules = Map.add m.name m modules
                     let outPulse = if state then Low else High
 
-                    let pulses =
-                        m.outputs
-                        |> List.map (fun dest -> (dest, outPulse))
+                    loop (head :: history) modules (rest @ (send m outPulse))
+            | { state = Conjunction { inputStates = inputStates } } as m ->
+                let inputStates = inputStates |> Map.add src pulse
 
-                    head :: loop modules (rest @ pulses)
-            | { state = Conjunction { inputStates = inputStates } } as m -> head :: loop modules rest
+                let outPulse =
+                    if inputStates |> Map.values |> Seq.forall ((=) High) then
+                        Low
+                    else
+                        High
 
-    [ for output in broadcaster -> output, Low ]
-    |> loop modules
-    |> printfn "%A"
+                loop
+                    (head :: history)
+                    (Map.add m.name { m with state = Conjunction { inputStates = inputStates } } modules)
+                    (rest @ (send m outPulse))
+
+    [ for output in broadcaster ->
+          { dest = output
+            src = "broadcaster"
+            level = Low } ]
+    |> loop [] modules
+
+let one lines =
+    let broadcaster, modules = parse lines
+
+    let modules = initializeConjunctions modules
+
+    pushButton broadcaster modules |> printfn "%A"
 
     0
