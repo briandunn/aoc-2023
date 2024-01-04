@@ -149,6 +149,13 @@ let one lines =
 
     let modules = initializeConjunctions modules
 
-    pushButton broadcaster modules |> printfn "%A"
+    let fold (history, modules) _ =
+        let pulses, modules = pushButton broadcaster modules
+
+        pulses @ history, modules
+
+    [ 1..2 ]
+    |> List.fold fold ([], modules)
+    |> printfn "%A"
 
     0
