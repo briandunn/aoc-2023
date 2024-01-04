@@ -1,7 +1,5 @@
 module Twenty
 
-type Broadcaster = string list
-
 type Level =
     | High
     | Low
@@ -13,61 +11,43 @@ type Conjunction = { inputStates: Map<string, Level> }
 type ModuleState =
     | FlipFlop of FlipFlop
     | Conjunction of Conjunction
+    | Broadcaster
 
 type Module =
     { name: string
       outputs: string list
       state: ModuleState }
 
-type InputLine =
-    | Broadcaster of Broadcaster
-    | Module of Module
-
 type Pulse =
     { src: string
       dest: string
       level: Level }
 
-let parse: string seq -> Broadcaster * Map<string, Module> =
-    let buildModule moduleType name destinations =
+let parse: string seq -> Module seq =
+    let buildModule name destinations =
         let destinations =
             destinations
             |> Regex.matches "([a-z]+)"
             |> Seq.toList
 
-        match moduleType with
-        | "" -> destinations |> Broadcaster |> Some
-        | "%" ->
-            { name = name
-              outputs = destinations
-              state = FlipFlop { state = false } }
-            |> Module
-            |> Some
-        | "&" ->
-            { name = name
-              outputs = destinations
-              state = Conjunction { inputStates = Map.empty } }
-            |> Module
-            |> Some
+        function
+        | "" -> Broadcaster |> Some
+        | "%" -> { state = false } |> FlipFlop |> Some
+        | "&" -> { inputStates = Map.empty } |> Conjunction |> Some
         | _ -> None
+        >> Option.map (fun state ->
+            { name = name
+              outputs = destinations
+              state = state })
 
     let parse =
         Regex.groups "^(%|&)?([a-z]+) -> (.+)$"
         >> Seq.toArray
         >> function
-            | [| _; moduleType; name; destinations |] -> buildModule moduleType name destinations
+            | [| _; moduleType; name; destinations |] -> buildModule name destinations moduleType
             | _ -> None
 
-    let fold (broadcaster, modMap) =
-        function
-        | Broadcaster destinations -> (Some destinations, modMap)
-        | Module ({ name = name } as m) -> broadcaster, (Map.add name m modMap)
-
     Seq.choose parse
-    >> Seq.fold fold (None, Map.empty)
-    >> function
-        | Some broadcaster, modMap -> broadcaster, modMap
-        | None, _ -> failwith "No broadcaster found"
 
 let initializeConjunctions modules =
     let conjunctions =
@@ -111,6 +91,8 @@ let send m level =
 
 let receive pulse m : (Level * Module) option =
     match m.state, pulse with
+    | Broadcaster, { level = Low } -> Some(Low, m)
+    | Broadcaster, _ -> None
     | FlipFlop _, { level = High } -> None
     | FlipFlop { state = state }, _ ->
         Some((if state then Low else High), { m with state = FlipFlop { state = not state } })
@@ -126,9 +108,9 @@ let receive pulse m : (Level * Module) option =
 
         Some(outPulse, { m with state = Conjunction { inputStates = inputStates } })
 
-let pushButton broadcaster modules =
-    let rec loop history (modules: Map<string, Module>) pulses =
-        match pulses with
+let pushButton =
+    let rec loop history (modules: Map<string, Module>) =
+        function
         | [] -> history, modules
         | { dest = dest } as head :: rest ->
             modules
@@ -138,24 +120,26 @@ let pushButton broadcaster modules =
                 | None -> loop (head :: history) modules rest
                 | Some (level, m) -> loop (head :: history) (Map.add dest m modules) (rest @ (send m level))
 
-    [ for output in broadcaster ->
-          { dest = output
-            src = "broadcaster"
-            level = Low } ]
-    |> loop [] modules
+    loop []
 
 let one lines =
-    let broadcaster, modules = parse lines
+    let modules =
+        seq { for m in parse lines -> m.name, m }
+        |> Map.ofSeq
+        |> initializeConjunctions
 
-    let modules = initializeConjunctions modules
+    let scan (_, modules) _ =
+        pushButton
+            modules
+            [ { src = "button"
+                dest = "broadcaster"
+                level = Low } ]
 
-    let fold (history, modules) _ =
-        let pulses, modules = pushButton broadcaster modules
-
-        pulses @ history, modules
-
-    [ 1..2 ]
-    |> List.fold fold ([], modules)
-    |> printfn "%A"
-
-    0
+    [ 1..1000 ]
+    |> Seq.scan scan ([], modules)
+    |> Seq.map fst
+    |> Seq.concat
+    |> Seq.countBy (fun { level = level } -> level)
+    |> Ten.p "levels"
+    |> Seq.map snd
+    |> Seq.reduce (*)
