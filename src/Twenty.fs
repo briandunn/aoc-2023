@@ -109,36 +109,34 @@ let send m level =
             level = level
             dest = dest } ]
 
+let receive pulse m : (Level * Module) option =
+    match m.state, pulse with
+    | FlipFlop _, { level = High } -> None
+    | FlipFlop { state = state }, _ ->
+        Some((if state then Low else High), { m with state = FlipFlop { state = not state } })
+
+    | Conjunction { inputStates = inputStates }, { src = src; level = pulse } ->
+        let inputStates = inputStates |> Map.add src pulse
+
+        let outPulse =
+            if inputStates |> Map.values |> Seq.forall ((=) High) then
+                Low
+            else
+                High
+
+        Some(outPulse, { m with state = Conjunction { inputStates = inputStates } })
+
 let pushButton broadcaster modules =
     let rec loop history (modules: Map<string, Module>) pulses =
         match pulses with
         | [] -> history, modules
-        | { dest = dest
-            level = pulse
-            src = src } as head :: rest ->
-            match Map.find dest modules with
-            | { state = FlipFlop { state = state } } as m ->
-                match pulse with
-                | High -> loop (head :: history) modules rest
-                | Low ->
-                    let m = { m with state = FlipFlop { state = not state } }
-                    let modules = Map.add m.name m modules
-                    let outPulse = if state then Low else High
-
-                    loop (head :: history) modules (rest @ (send m outPulse))
-            | { state = Conjunction { inputStates = inputStates } } as m ->
-                let inputStates = inputStates |> Map.add src pulse
-
-                let outPulse =
-                    if inputStates |> Map.values |> Seq.forall ((=) High) then
-                        Low
-                    else
-                        High
-
-                loop
-                    (head :: history)
-                    (Map.add m.name { m with state = Conjunction { inputStates = inputStates } } modules)
-                    (rest @ (send m outPulse))
+        | { dest = dest } as head :: rest ->
+            modules
+            |> Map.tryFind dest
+            |> Option.bind (receive head)
+            |> function
+                | None -> loop (head :: history) modules rest
+                | Some (level, m) -> loop (head :: history) (Map.add dest m modules) (rest @ (send m level))
 
     [ for output in broadcaster ->
           { dest = output
