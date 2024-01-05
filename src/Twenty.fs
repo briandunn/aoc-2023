@@ -177,8 +177,7 @@ let partition modules =
                     |> Set.toList
                     |> List.append rest
                     |> partition (Set.add head visited)
-                | None ->
-                    partition visited rest
+                | None -> partition visited rest
 
     let slice names =
         seq { for name in names -> name, Map.find name modules }
@@ -229,8 +228,14 @@ let toGraph pre modules =
 
 let graphPartitions lines =
     let mapi i m =
-        let color = "red green blue brown" |> String.split ' ' |> Seq.item (i % 4)
-        m |> Map.values |> toGraph (sprintf "edge [color=\"%s\"]" color)
+        let color =
+            "red green blue brown"
+            |> String.split ' '
+            |> Seq.item (i % 4)
+
+        m
+        |> Map.values
+        |> toGraph (sprintf "edge [color=\"%s\"]" color)
 
     parse lines
     |> Seq.toList
@@ -241,63 +246,25 @@ let graphPartitions lines =
 
     0
 
+
 let two lines =
     let modules = parse lines |> Seq.toList
 
-    let partitions =
-        modules
-        |> Seq.tryFind (function
-            | { state = Broadcaster } -> true
-            | _ -> false)
-        |> function
-            | Some { outputs = outputs } ->
-                let modules = seq { for m in modules -> m.name, m } |> Map.ofSeq
-
-                let map output =
-                    (partition modules output)
-                    |> Map.add
-                        "broadcaster"
-                        { name = "broadcaster"
-                          outputs = [ output ]
-                          state = Broadcaster }
-
-                outputs |> List.map map
-            | None -> []
-
-
-    let mapi i m =
-        m |> Map.find "broadcaster",
-        m
-        |> (initializeConjunctions
-            >> run
-            >> Seq.take 10_000
-            >> Seq.map (fun (_, pulses, _) -> pulses)
-            >> Seq.concat
-            >> Seq.filter (function
-                | { dest = "rx" } -> true
-                | _ -> false)
-            >> Seq.countBy (fun { level = level } -> level)
-            >> Seq.toList)
+    let partitions = partitionBroadcaster modules
 
     partitions
-    |> Seq.mapi (
-        mapi
-    // initializeConjunctions
-    // >> run
-    // >> Seq.take 10_000
-    // >> Seq.map (fun (_, pulses, _) -> pulses)
-    // >> Seq.concat
-    // >> Seq.countBy id
-    // >> Seq.toList
-    // >> Seq.takeWhile (function
-    //     | i, pulses, _modules ->
-    //         pulses
-    //         |> List.exists (function
-    //             | { dest = "rx"; level = Low } -> true
-    //             | _ -> false)
-    //         |> not)
-    // >> Seq.last
+    |> Seq.map (
+        initializeConjunctions
+        >> run
+        >> Seq.find (fun (_i, pulses, _modules) ->
+            pulses
+            |> List.exists (fun { dest = dest; level = level } -> dest = "rx" && level = Low))
     )
+    // |> Seq.map (fun (_i, pulses, _modules) ->
+    //     pulses
+    //     |> List.filter (fun { dest = dest } -> dest = "rx") |> Seq.tryHead)
+    |> Seq.map (fun (i, _pulses, _modules) -> bigint i)
+    |> Seq.reduce (*)
     |> printfn "%A"
 
     0
