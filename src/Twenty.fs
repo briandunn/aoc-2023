@@ -149,69 +149,83 @@ let one lines =
     |> Seq.map snd
     |> Seq.reduce (*)
 
-let outputsInclude dest { outputs = outputs } = List.contains dest outputs
+let run modules =
+    let scan (_, modules) i =
+        let _pulses, modules =
+            pushButton
+                modules
+                [ { src = "button"
+                    dest = "broadcaster"
+                    level = Low } ]
 
-let runUntil predicate modules =
-    let scan (_, (_, modules)) i =
-        i,
-        pushButton
-            modules
-            [ { src = "button"
-                dest = "broadcaster"
-                level = Low } ]
+        (i, modules)
 
     Seq.initInfinite id
-    |> Seq.scan scan (0, ([], modules))
-    |> Seq.map (fun (i, (pulses, _)) -> i, pulses)
-    |> Seq.takeWhile (snd >> List.exists predicate >> not)
-    |> Seq.last
-    |> fst
+    |> Seq.scan scan (0, modules)
+
+let partition modules =
+    let rec partition visited =
+        function
+        | [] -> visited
+        | head :: rest ->
+            Map.tryFind head modules
+            |> function
+                | Some { outputs = outputs } ->
+                    visited
+                    |> Set.difference (Set.ofList outputs)
+                    |> Set.toList
+                    |> List.append rest
+                    |> partition (Set.add head visited)
+                | None -> visited
+
+    let slice names =
+        seq { for name in names -> name, Map.find name modules }
+        |> Map.ofSeq
+
+    List.singleton >> partition Set.empty >> slice
+
 
 let two lines =
-    let moduleMap =
-        seq { for m in parse lines -> m.name, m }
-        |> Map.ofSeq
-        |> initializeConjunctions
+    let modules = parse lines |> Seq.toList
 
-    // search backwards from rx until we hit FlipFlops
+    let partitions =
+        modules
+        |> Seq.tryFind (function
+            | { state = Broadcaster } -> true
+            | _ -> false)
+        |> function
+            | Some { outputs = outputs } ->
+                let modules = seq { for m in modules -> m.name, m } |> Map.ofSeq
 
-    let modules =
-        moduleMap
-        |> Map.toSeq
-        |> Seq.map snd
-        |> Seq.toList
+                let map output =
+                    (partition modules output)
+                    |> Map.add
+                        "broadcaster"
+                        { name = "broadcaster"
+                          outputs = [ output ]
+                          state = Broadcaster }
 
-    let rec loop: string list -> string list list =
-        function
-        | [] -> [ [] ]
-        | head :: rest ->
-            let inputs = modules |> List.filter (outputsInclude head)
-
-            if inputs
-               |> List.exists (function
-                   | { state = Conjunction _ } -> false
-                   | _ -> true) then
-                [ [] ]
-            else
-                printfn "only conjunction inputs - %s" head
-                let inputNames = [ for m in inputs -> m.name ]
-
-                [ inputNames ] @ (loop (rest @ inputNames))
+                outputs |> List.map map
+            | None -> []
 
 
-    let conjunctions = loop [ "rx" ] |> List.take 2 |> List.last
-
-    let map conjunctionName =
-        runUntil
-            (Map.tryFind conjunctionName
-             >> function
-                 | Some { state = Conjunction { inputStates = inputStates } } ->
-                     inputStates |> Map.values |> Seq.exists ((=) Low)
-                 | _ -> false)
-
-            moduleMap
-
-    conjunctions |> List.map map |> printfn "%A"
-
+    partitions
+    |> Seq.map (
+        initializeConjunctions
+        >> (fun m ->
+            m |> Map.find "gh" |> printfn "%A"
+            m)
+        >> run
+        >> Seq.takeWhile (function
+            | _, [] -> true
+            | i, pulses ->
+                pulses
+                |> List.exists (function
+                    | { dest = "rx"; level = Low } -> false
+                    | _ -> true))
+        >> Seq.map fst
+        >> Seq.last
+    )
+    |> printfn "%A"
 
     0
