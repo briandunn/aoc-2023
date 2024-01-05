@@ -108,7 +108,7 @@ let receive pulse m : (Level * Module) option =
 
         Some(outPulse, { m with state = Conjunction { inputStates = inputStates } })
 
-let pushButton =
+let pushButton modules =
     let rec loop history (modules: Map<string, Module>) =
         function
         | [] -> history, modules
@@ -120,9 +120,13 @@ let pushButton =
                 | None -> loop (head :: history) modules rest
                 | Some (level, m) -> loop (head :: history) (Map.add dest m modules) (rest @ (send m level))
 
-    loop []
+
+    loop [] modules
+    >> function
+        | history, modules -> (List.rev history), modules
 
 let level { level = level } = level
+
 let one lines =
     let modules =
         seq { for m in parse lines -> m.name, m }
@@ -144,3 +148,70 @@ let one lines =
     |> Ten.p "levels"
     |> Seq.map snd
     |> Seq.reduce (*)
+
+let outputsInclude dest { outputs = outputs } = List.contains dest outputs
+
+let runUntil predicate modules =
+    let scan (_, (_, modules)) i =
+        i,
+        pushButton
+            modules
+            [ { src = "button"
+                dest = "broadcaster"
+                level = Low } ]
+
+    Seq.initInfinite id
+    |> Seq.scan scan (0, ([], modules))
+    |> Seq.map (fun (i, (pulses, _)) -> i, pulses)
+    |> Seq.takeWhile (snd >> List.exists predicate >> not)
+    |> Seq.last
+    |> fst
+
+let two lines =
+    let moduleMap =
+        seq { for m in parse lines -> m.name, m }
+        |> Map.ofSeq
+        |> initializeConjunctions
+
+    // search backwards from rx until we hit FlipFlops
+
+    let modules =
+        moduleMap
+        |> Map.toSeq
+        |> Seq.map snd
+        |> Seq.toList
+
+    let rec loop: string list -> string list list =
+        function
+        | [] -> [ [] ]
+        | head :: rest ->
+            let inputs = modules |> List.filter (outputsInclude head)
+
+            if inputs
+               |> List.exists (function
+                   | { state = Conjunction _ } -> false
+                   | _ -> true) then
+                [ [] ]
+            else
+                printfn "only conjunction inputs - %s" head
+                let inputNames = [ for m in inputs -> m.name ]
+
+                [ inputNames ] @ (loop (rest @ inputNames))
+
+
+    let conjunctions = loop [ "rx" ] |> List.take 2 |> List.last
+
+    let map conjunctionName =
+        runUntil
+            (Map.tryFind conjunctionName
+             >> function
+                 | Some { state = Conjunction { inputStates = inputStates } } ->
+                     inputStates |> Map.values |> Seq.exists ((=) Low)
+                 | _ -> false)
+
+            moduleMap
+
+    conjunctions |> List.map map |> printfn "%A"
+
+
+    0
