@@ -246,25 +246,92 @@ let graphPartitions lines =
 
     0
 
+let parentsOf (name: string) (modules: Map<string, Module>) : string list seq =
+    let modules = Map.toList modules
 
-let two lines =
+    let unfold children =
+        let parents =
+            [ for name, m in modules do
+                  if Set.intersect (Set.ofList m.outputs) (Set.ofList children)
+                     |> Set.isEmpty
+                     |> not then
+                      name ]
+
+        if Seq.isEmpty parents then
+            None
+        else
+            Some(parents, parents)
+
+    Seq.unfold unfold [ name ]
+
+
+let two' lines =
     let modules = parse lines |> Seq.toList
 
     let partitions = partitionBroadcaster modules
 
-    partitions
-    |> Seq.map (
-        initializeConjunctions
-        >> run
-        >> Seq.find (fun (_i, pulses, _modules) ->
+    let map partition =
+        partition
+        |> initializeConjunctions
+        |> run
+        |> Seq.find (fun (_i, pulses, _modules) ->
             pulses
-            |> List.exists (fun { dest = dest; level = level } -> dest = "rx" && level = Low))
-    )
-    // |> Seq.map (fun (_i, pulses, _modules) ->
-    //     pulses
-    //     |> List.filter (fun { dest = dest } -> dest = "rx") |> Seq.tryHead)
-    |> Seq.map (fun (i, _pulses, _modules) -> bigint i)
+            |> List.exists
+                (fun { src = src
+                       dest = dest
+                       level = level } -> dest = "rx" && level = Low))
+
+    partitions
+    |> Seq.map map
+    |> Seq.map (fun (i, _pulses, _modules) -> bigint (i + 1))
     |> Seq.reduce (*)
+    |> printfn "%A"
+
+    // 226732077152351 right
+    // 226498323078144 not right
+
+    0
+
+let two lines =
+    let modules =
+        [ for m in parse lines |> Seq.toList -> m.name, m ]
+        |> Map.ofSeq
+
+    let grandpas =
+        [ for grandpa in
+              modules
+              |> parentsOf "rx"
+              |> Seq.take 2
+              |> Seq.tryLast
+              |> Option.defaultValue [] do
+              grandpa, None ]
+        |> Map.ofList
+
+
+    let scan grandpas (i, pulses, _modules) =
+        let fold grandpas pulse =
+            match pulse with
+            | { src = src; level = High } when Map.containsKey src grandpas ->
+                Map.add src (Some(i)) grandpas
+            | _ -> grandpas
+
+        List.fold fold grandpas pulses
+
+
+    modules
+    |> initializeConjunctions
+    |> run
+    |> Seq.scan scan grandpas
+    |> Seq.skipWhile (Map.values >> Seq.exists Option.isNone)
+    |> Seq.tryHead
+    |> function
+        | Some grandpas ->
+            grandpas
+            |> Map.values
+            |> Seq.choose id
+            |> Seq.map (((+) 1) >> bigint)
+            |> Seq.reduce (*)
+        | _ -> bigint -1
     |> printfn "%A"
 
     0
