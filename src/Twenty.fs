@@ -145,23 +145,24 @@ let one lines =
     |> Seq.map fst
     |> Seq.concat
     |> Seq.countBy level
-    |> Ten.p "levels"
     |> Seq.map snd
     |> Seq.reduce (*)
 
 let run modules =
-    let scan (_, modules) i =
-        let _pulses, modules =
+    let scan (_, _, modules) i =
+        let pulses, modules =
             pushButton
                 modules
                 [ { src = "button"
                     dest = "broadcaster"
                     level = Low } ]
 
-        (i, modules)
+        i, pulses, modules
 
     Seq.initInfinite id
-    |> Seq.scan scan (0, modules)
+    |> Seq.scan scan (0, [], modules)
+    |> Seq.tail
+
 
 let partition modules =
     let rec partition visited =
@@ -176,7 +177,8 @@ let partition modules =
                     |> Set.toList
                     |> List.append rest
                     |> partition (Set.add head visited)
-                | None -> visited
+                | None ->
+                    partition visited rest
 
     let slice names =
         seq { for name in names -> name, Map.find name modules }
@@ -184,6 +186,60 @@ let partition modules =
 
     List.singleton >> partition Set.empty >> slice
 
+let partitionBroadcaster (modules: Module seq) =
+    modules
+    |> Seq.tryFind (function
+        | { state = Broadcaster } -> true
+        | _ -> false)
+    |> function
+        | Some { outputs = outputs } ->
+            let modules = seq { for m in modules -> m.name, m } |> Map.ofSeq
+
+            let map output =
+                (partition modules output)
+                |> Map.add
+                    "broadcaster"
+                    { name = "broadcaster"
+                      outputs = [ output ]
+                      state = Broadcaster }
+
+            outputs |> List.map map
+        | None -> []
+
+let toGraph pre modules =
+    let nodes =
+        seq {
+            for m in modules ->
+                match m.state with
+                | Broadcaster -> sprintf "%s [shape=box]" m.name
+                | FlipFlop _ -> sprintf "%s [shape=ellipse]" m.name
+                | Conjunction _ -> sprintf "%s [shape=diamond]" m.name
+        }
+
+    let connections =
+        seq {
+            for { name = name; outputs = outputs } in modules do
+                for output in outputs -> sprintf "%s -> %s" name output
+        }
+
+    nodes
+    |> Seq.append connections
+    |> String.concat ";\n"
+    |> sprintf "subgraph {\n%s\n;%s;\n}" pre
+
+let graphPartitions lines =
+    let mapi i m =
+        let color = "red green blue brown" |> String.split ' ' |> Seq.item (i % 4)
+        m |> Map.values |> toGraph (sprintf "edge [color=\"%s\"]" color)
+
+    parse lines
+    |> Seq.toList
+    |> partitionBroadcaster
+    |> Seq.mapi mapi
+    |> String.concat "\n"
+    |> printfn "digraph {\n%s;\n}"
+
+    0
 
 let two lines =
     let modules = parse lines |> Seq.toList
@@ -209,22 +265,38 @@ let two lines =
             | None -> []
 
 
+    let mapi i m =
+        m |> Map.find "broadcaster",
+        m
+        |> (initializeConjunctions
+            >> run
+            >> Seq.take 10_000
+            >> Seq.map (fun (_, pulses, _) -> pulses)
+            >> Seq.concat
+            >> Seq.filter (function
+                | { dest = "rx" } -> true
+                | _ -> false)
+            >> Seq.countBy (fun { level = level } -> level)
+            >> Seq.toList)
+
     partitions
-    |> Seq.map (
-        initializeConjunctions
-        >> (fun m ->
-            m |> Map.find "gh" |> printfn "%A"
-            m)
-        >> run
-        >> Seq.takeWhile (function
-            | _, [] -> true
-            | i, pulses ->
-                pulses
-                |> List.exists (function
-                    | { dest = "rx"; level = Low } -> false
-                    | _ -> true))
-        >> Seq.map fst
-        >> Seq.last
+    |> Seq.mapi (
+        mapi
+    // initializeConjunctions
+    // >> run
+    // >> Seq.take 10_000
+    // >> Seq.map (fun (_, pulses, _) -> pulses)
+    // >> Seq.concat
+    // >> Seq.countBy id
+    // >> Seq.toList
+    // >> Seq.takeWhile (function
+    //     | i, pulses, _modules ->
+    //         pulses
+    //         |> List.exists (function
+    //             | { dest = "rx"; level = Low } -> true
+    //             | _ -> false)
+    //         |> not)
+    // >> Seq.last
     )
     |> printfn "%A"
 
