@@ -1,0 +1,128 @@
+#!meta
+
+{"kernelInfo":{"defaultKernelName":"fsharp","items":[{"aliases":[],"languageName":"fsharp","name":"fsharp"}]}}
+
+#!markdown
+
+After reading a few times, it sounds like were looking at Dijkstra, saving the cost as we go, then choosing all paths of a cost of 64. 
+
+So as we are accumulating cost, as soon as it is > 64 we're done. 
+
+But that is optimizing for the path to be the cheapest... really we just want the number of paths we can take that are length 64.
+
+the number of paths of length N that *end* at unique nodes.
+
+Maybe a variation of Dijkstra where if a path to a garden is *closer* to N we chose it, not just lower than the last path.
+
+Anywho... as usual, first we parse.
+
+#!fsharp
+
+let testInput = "...........
+.....###.#.
+.###.##..#.
+..#.#...#..
+....#.#....
+.##..S####.
+.##..#...#.
+.......##..
+.##.#.####.
+.##..##.##.
+...........
+"
+
+#!fsharp
+
+type Tile = Garden | Rock
+type Coord = int*int
+
+#!fsharp
+
+let parse (input: string) =
+  let lines = input.Split('\n')
+
+  let fold acc (y, line) =
+    let fold (start, grid) (x, c) =
+      match c with
+      | '.' -> (start, grid)
+      | '#' ->
+        Array2D.set grid x y Rock
+        (start, grid)
+      | 'S' -> (Some (x, y), grid)
+      | _ -> failwith "invalid input"
+
+    line |> Seq.indexed |> Seq.fold fold acc
+
+  let width = lines |> Seq.tryHead |> Option.map String.length |> Option.defaultValue 0
+  let height = Seq.length lines
+  let grid = Array2D.create width height Garden
+
+  lines |> Seq.indexed |> Seq.fold fold (None, grid) |> function
+                                                        | (Some (x, y), grid) -> (x, y), grid
+                                                        | None, _ -> failwith "no start"
+  
+let start, grid = parse testInput
+
+#!markdown
+
+Ok, so far so good. Another fun parser. Now it gets interesting. First we're going to need a way to get a list of valid moves from any tile.
+
+#!fsharp
+
+let inBounds grid (x, y) =
+  if x >= 0 && x < Array2D.length1 grid && y >= 0 && y < Array2D.length2 grid then Some (x, y)
+  else None
+
+let isGarden grid (x,y) =
+  match Array2D.get grid x y with
+  | Garden -> Some (x, y)
+  | Rock -> None
+
+let neighbors (x, y) grid =
+  [(x, y - 1); (x, y + 1); (x - 1, y); (x + 1, y)]
+  |> List.choose (inBounds grid >> Option.bind (isGarden grid))
+
+neighbors start grid
+
+#!markdown
+
+Now lets try to write that custom Dijkstra
+
+#!fsharp
+
+let walk target start grid =
+  let neighbors tile = neighbors tile grid
+  let isCloser a b = abs (a - target) > abs (b - target)
+
+  let closest acc tile weight =
+    match acc with
+    | Some (_, previousWeight) when isCloser weight previousWeight -> acc
+    | _ -> Some (tile, weight)
+
+  let rec loop found visited weights =
+    let unvisited list = Set.difference (Set.ofList list) visited
+
+    weights
+    |> Map.fold closest None
+    |> function
+      | Some (coord, weight) when weight = target ->
+          loop (Set.add coord found) (Set.add coord visited) (Map.remove coord weights)
+
+      | Some (coord, weight) ->
+          let updateWeights weights neighbor =
+            let nextWeight = weight + 1
+            Map.tryFind neighbor weights
+            |> function
+            | Some previousWeight when isCloser nextWeight previousWeight -> weights
+            | _ -> Map.add neighbor nextWeight weights
+          let weights = coord |> neighbors |> unvisited |> Seq.fold updateWeights weights
+          loop found (Set.add coord visited) (Map.remove coord weights)
+      | None ->
+          found
+
+  (start, 0)
+  |> List.singleton
+  |> Map.ofList
+  |> loop Set.empty Set.empty
+
+walk 6 start grid
