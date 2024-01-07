@@ -1,6 +1,6 @@
 #!meta
 
-{"kernelInfo":{"defaultKernelName":"fsharp","items":[{"aliases":[],"languageName":"fsharp","name":"fsharp"}]}}
+{"kernelInfo":{"defaultKernelName":"csharp","items":[{"aliases":[],"name":"csharp"},{"aliases":[],"languageName":"fsharp","name":"fsharp"}]}}
 
 #!markdown
 
@@ -86,11 +86,15 @@ neighbors start grid
 
 #!markdown
 
-Now lets try to write that custom Dijkstra
+Now lets try to write that custom Dijkstra.
+
+My first attempt failed - I think it's because of the disallowing of back tracking.
+
+Removing visited tracking gives me even fewer matches somehow. Perhaps I should think about this more instead of assuming I can hack Dijkstra into shape.
 
 #!fsharp
 
-let walk target start grid =
+let walk' target start grid =
   let neighbors tile = neighbors tile grid
   let isCloser a b = abs (a - target) > abs (b - target)
 
@@ -99,14 +103,14 @@ let walk target start grid =
     | Some (_, previousWeight) when isCloser weight previousWeight -> acc
     | _ -> Some (tile, weight)
 
-  let rec loop found visited weights =
-    let unvisited list = Set.difference (Set.ofList list) visited
-
+  let rec loop n found weights =
+    let n = n + 1
+    if n > 1000 then found else
     weights
     |> Map.fold closest None
     |> function
       | Some (coord, weight) when weight = target ->
-          loop (Set.add coord found) (Set.add coord visited) (Map.remove coord weights)
+          loop n (Set.add coord found) (Map.remove coord weights)
 
       | Some (coord, weight) ->
           let updateWeights weights neighbor =
@@ -115,14 +119,112 @@ let walk target start grid =
             |> function
             | Some previousWeight when isCloser nextWeight previousWeight -> weights
             | _ -> Map.add neighbor nextWeight weights
-          let weights = coord |> neighbors |> unvisited |> Seq.fold updateWeights weights
-          loop found (Set.add coord visited) (Map.remove coord weights)
+          let weights = coord |> neighbors |> Seq.fold updateWeights weights
+          loop n found weights
       | None ->
           found
 
   (start, 0)
   |> List.singleton
   |> Map.ofList
-  |> loop Set.empty Set.empty
+  |> loop 0 Set.empty
 
 walk 6 start grid
+
+#!markdown
+
+What if we
+
+* iterate all gardens
+  * use modified D to try to find any path to start of length
+
+#!fsharp
+
+let walk'' target start dest grid =
+  let neighbors tile = neighbors tile grid
+  let isCloser a b = abs (a - target) > abs (b - target)
+
+  let closest acc tile weight =
+    match acc with
+    | Some (_, previousWeight) when isCloser weight previousWeight -> acc
+    | _ -> Some (tile, weight)
+
+  let rec loop weights =
+    weights
+    |> Map.fold closest None
+    |> function
+      | Some (coord, weight) when weight = target && coord = dest -> true
+      | Some (coord, weight) ->
+          let updateWeights weights neighbor =
+            let nextWeight = weight + 1
+            Map.tryFind neighbor weights
+            |> function
+            | Some previousWeight when isCloser nextWeight previousWeight -> weights
+            | _ -> Map.add neighbor nextWeight weights
+          let nextWeights = coord |> neighbors |> Seq.fold updateWeights weights
+          if weights <> nextWeights then loop (Map.remove coord nextWeights)
+          else false
+      | None -> false
+
+  (start, 0)
+  |> List.singleton
+  |> Map.ofList
+  |> loop
+
+let mapi x y =
+  function
+  | Garden -> 
+     walk'' 6 start (x,y) grid
+  | _ -> false
+
+
+let reachable = Array2D.mapi mapi grid
+
+seq { for x in 0 .. Array2D.length1 reachable - 1 do
+        for y in 0 .. Array2D.length2 reachable - 1 do
+          if Array2D.get reachable x y then (x, y)
+} |> Seq.toList
+
+#!markdown
+
+Ok, that didn't work. Let's get simpler. Maybe the puzzle description has a clue. I'm sure it won't be efficient enough for whatever part 2 is, but we could:
+
+* from start, find all gardens we can get to in 1 step
+* from each of those gardens find all points we can get to in 1 step
+* keep going until we have taken 64 steps
+
+They pretty much spell it out like that in the definition. Lets give it a shot.
+
+#!fsharp
+
+let walk start stepTarget grid = 
+  let neighbors tile = grid |> neighbors tile |> Set.ofSeq
+  let rec loop steps =
+    if steps = stepTarget then id
+    else
+      Set.map neighbors >> Set.unionMany >> loop (steps + 1)
+
+  start |> Set.singleton |> loop 0
+
+walk start 6 grid
+
+#!markdown
+
+Ok. now we're getting somewhere. Done with part 1?
+
+#!fsharp
+
+let fetchInput day =
+  let session = "53616c7465645f5f10b226a63ffd38a2e4e417f9686924ec98b28a87c982fdb4b2e08aa5c3bb23d2863857450194a13bc6ff565cf1426c7e47de2e52cec63b31"
+  let url = sprintf "https://adventofcode.com/2023/day/%d/input" day
+  task {
+    use client = new System.Net.Http.HttpClient()
+    client.DefaultRequestHeaders.Add("Cookie", sprintf "session=%s" session)
+    return! url |> client.GetStringAsync
+  }
+
+
+let input = fetchInput 21 |> Async.AwaitTask |> Async.RunSynchronously
+
+let start, grid = parse input
+walk start 64 grid
