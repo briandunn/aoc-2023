@@ -1,6 +1,6 @@
 #!meta
 
-{"kernelInfo":{"defaultKernelName":"fsharp","items":[{"aliases":[],"languageName":"fsharp","name":"fsharp"}]}}
+{"kernelInfo":{"defaultKernelName":"csharp","items":[{"aliases":[],"name":"csharp"},{"aliases":[],"languageName":"fsharp","name":"fsharp"}]}}
 
 #!markdown
 
@@ -93,7 +93,7 @@ let settle : Brick seq -> Brick seq =
      let heights = columnHeights settled
      let height col = heights |> Map.tryFind col |> Option.defaultValue 0
      let newZ = brick |> Brick.occupiedColumns |> Seq.map height |> Seq.max |> (+) 1
-     seq { Brick.putZ newZ brick; yield! settled }
+     seq { yield! settled; Brick.putZ newZ brick }
 
   Seq.sortBy Brick.z >> Seq.fold fold Seq.empty
 
@@ -135,6 +135,76 @@ let fetchInput day =
 
 let input = fetchInput 22 |> Async.AwaitTask |> Async.RunSynchronously
 
-input |> parse |> settle |> disintegratable
+let settled = input |> parse |> settle
 
 // 1486 was too high
+// 505 is too low
+
+#!markdown
+
+Well. interesting that it's too high. I'm not confident in my `settle` implementation. Also, a more accurate definition for `disintegratable`
+
+for each brick
+* remove the brick
+* settle again
+did the `z` of any *other* brick change?
+
+#!fsharp
+
+let canDisintegrate (settled: Brick seq) =
+  let byTopZ = settled |> Seq.groupBy Brick.topZ
+  let byZ = settled |> Seq.groupBy Brick.z |> Map.ofSeq
+
+  // only need to re-settle the bricks that may be resting on bricks of this layer.
+  // that's all bricks with `z` = `topZ` + 1
+
+  // one reason this is wrong:
+  // settling bricks that share a topZ will shift those that are height 1 but not taller
+
+  // for each z 
+    // find all bricks with topZ = z
+    // find the holes
+    // do any of the bricks at z + 1 fit in the holes?
+
+  seq {
+    for topZ, bricks in byTopZ do
+      let resting = Map.tryFind (topZ + 1) byZ |> Option.defaultValue Seq.empty |> Seq.map (Brick.occupiedColumns >> Set.ofSeq)
+      for i in 0 .. Seq.length bricks - 1 do
+        let occupied = bricks |> Seq.removeAt i |> Seq.map Brick.occupiedColumns |> Seq.concat |> Set.ofSeq
+        resting |> Seq.exists (Set.intersect occupied >> ((=) Set.empty)) |> not
+  } |> Seq.filter id |> Seq.length
+
+
+
+testInput |> parse |> settle |> canDisintegrate
+
+#!markdown
+
+Ok that bruit force definition sure looks right to me. So I think `settle` is broken.
+
+#!fsharp
+
+let settleIsIdempotent input =
+  let settled = settle input
+  printfn "settled: %A" settled
+  let settledAgain = settle settled
+  printfn "settled again: %A" settledAgain
+  Set.ofSeq settled = Set.ofSeq settledAgain
+
+testInput |> parse |> Seq.take 2 |> settleIsIdempotent
+
+#!markdown
+
+Maybe just an ordering thing?
+
+#!markdown
+
+Ok. was two things - order of output and seq comparison.
+
+#!fsharp
+
+settled |> canDisintegrate
+
+#!fsharp
+
+printfn "%d" (settled |> Seq.length)
