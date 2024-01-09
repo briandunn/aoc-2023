@@ -1,0 +1,140 @@
+#!meta
+
+{"kernelInfo":{"defaultKernelName":"fsharp","items":[{"aliases":[],"languageName":"fsharp","name":"fsharp"}]}}
+
+#!markdown
+
+Yay 3D Tetris!
+
+#!fsharp
+
+let testInput = "1,0,1~1,2,1
+0,0,2~2,0,2
+0,2,3~2,2,3
+0,0,4~0,2,4
+2,0,5~2,2,5
+0,1,6~2,1,6
+1,1,8~1,1,9
+"
+
+#!fsharp
+
+type Point = int * int * int
+type Column = int * int
+type Brick = Point * Point
+
+module Point =
+  let x (x, _, _) = x
+  let y (_, y, _) = y
+  let z (_, _, z) = z
+  let mapZ f (x, y, z) = (x, y, f z)
+  let putZ z (x, y, _) = (x, y, z)
+
+module Brick =
+  let z (start, _) = Point.z start
+  let topZ (start, stop) = max (Point.z start) (Point.z stop)
+  let height (start, stop) = abs (Point.z start - Point.z stop)
+  let putZ z =
+    function
+    | (start, stop) as brick ->
+      Point.putZ z start, Point.putZ (z + height brick) stop 
+
+  let occupiedColumns (start, stop) =
+    let x1, x2 = Point.x start, Point.x stop
+    let y1, y2 = Point.y start, Point.y stop
+    seq { for x in x1 .. x2 do
+          for y in y1 .. y2 do
+            yield x, y }
+
+[(1,0,1),(1,2,1); (1,1,8),(1,1,9)] |> List.map Brick.occupiedColumns
+
+#!fsharp
+
+let parse (input: string) : Brick seq =
+  let parsePoint (input: string) =
+      input.Split(',') |> Array.map int |> function [| x; y; z |] -> x, y, z
+
+  seq { for line in input.Split('\n') do
+         if line <> "" then
+          line.Split('~') |> Array.map parsePoint |> Array.sortBy Point.z |> function [| start; stop |] -> (start, stop) }
+
+
+parse testInput
+
+#!markdown
+
+Alright - parsed. Now to make them fall.
+
+Since the bricks can't rotate Z is the only dimension that will ever change.
+
+find the first unsettled brick with the lowest Z value.
+Decrease Z until it is either 1, or the brick collides with another settled brick.
+
+Since this is an iterative process that modifies a state (settled bricks) we can fold
+
+#!fsharp
+
+let columnHeights bricks =
+  let map _ = Seq.map snd >> Seq.max
+
+  seq { for brick in bricks do
+          for column in Brick.occupiedColumns brick do
+            yield column, Brick.topZ brick }
+  |> Seq.groupBy fst
+  |> Map.ofSeq
+  |> Map.map map
+
+columnHeights (parse testInput)
+
+#!fsharp
+
+let settle : Brick seq -> Brick seq =
+  let fold (settled: Brick seq) (brick: Brick) : Brick seq =
+     let heights = columnHeights settled
+     let height col = heights |> Map.tryFind col |> Option.defaultValue 0
+     let newZ = brick |> Brick.occupiedColumns |> Seq.map height |> Seq.max |> (+) 1
+     seq { Brick.putZ newZ brick; yield! settled }
+
+  Seq.sortBy Brick.z >> Seq.fold fold Seq.empty
+
+testInput |> parse |> settle
+
+#!markdown
+
+That seems to work. Now to detect which can be disintegrated. Empirically it seems to be   
+
+1) all bricks that share a Z
+2) any brick at the top
+
+#!fsharp
+
+let disintegratable (bricks: Brick seq) =
+  let byZ = bricks |> Seq.groupBy Brick.z |> Seq.sortBy fst |> Seq.rev
+  let topCount = Seq.tryHead byZ |> Option.map (snd >> Seq.length) |> Option.defaultValue 0
+  byZ |> Seq.tail |> Seq.map (snd >> Seq.length) |> Seq.filter ((<) 1) |> Seq.sum |> (+) topCount
+
+testInput |> parse |> settle |> disintegratable
+
+// [1;2;3] |> Seq.filter ((<) 1)
+
+#!markdown
+
+doubt its that simple, but lets check.
+
+#!fsharp
+
+let fetchInput day =
+  let session = "53616c7465645f5f10b226a63ffd38a2e4e417f9686924ec98b28a87c982fdb4b2e08aa5c3bb23d2863857450194a13bc6ff565cf1426c7e47de2e52cec63b31"
+  let url = sprintf "https://adventofcode.com/2023/day/%d/input" day
+  task {
+    use client = new System.Net.Http.HttpClient()
+    client.DefaultRequestHeaders.Add("Cookie", sprintf "session=%s" session)
+    return! url |> client.GetStringAsync
+  }
+
+
+let input = fetchInput 22 |> Async.AwaitTask |> Async.RunSynchronously
+
+input |> parse |> settle |> disintegratable
+
+// 1486 was too high
