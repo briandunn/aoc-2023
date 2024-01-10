@@ -139,6 +139,14 @@ List.iter (print testGrid) paths
 
 #!fsharp
 
-let part1 = (input |> parse |> traverse |> List.map Set.count |> List.max) - 1
+// let part1 = (input |> parse |> traverse |> List.map Set.count |> List.max) - 1
 
 part1
+
+#!fsharp
+
+(input |> parse |> traverse |> List.map Set.count |> List.max) - 1
+
+#!markdown
+
+Ok. Not to be too hammer so everything is a nail, but isn't this a case for a _reverse_ dijksta? ike, a priority queue that will return the longest path to any point?
