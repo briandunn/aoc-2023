@@ -8,6 +8,10 @@ Yay 3D Tetris!
 
 #!fsharp
 
+#load "Aoc.fsx"
+
+#!fsharp
+
 let testInput = "1,0,1~1,2,1
 0,0,2~2,0,2
 0,2,3~2,2,3
@@ -127,7 +131,7 @@ let fetchInput day =
   }
 
 
-let input = fetchInput 22 |> Async.AwaitTask |> Async.RunSynchronously
+let input = Aoc.fetchInput 22
 
 let settled = input |> parse |> Seq.sortBy Brick.z |> settle
 
@@ -192,12 +196,6 @@ Maybe just an ordering thing?
 #!markdown
 
 Ok. was two things - order of output and seq comparison.
-
-#!fsharp
-
-// let part1 = settled |> canDisintegrate |> Seq.filter ((=) Set.empty) |> Seq.length
-
-part1
 
 #!markdown
 

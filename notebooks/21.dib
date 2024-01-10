@@ -54,12 +54,15 @@ let parse (input: string) =
     line |> Seq.indexed |> Seq.fold fold acc
 
   let width = lines |> Seq.tryHead |> Option.map String.length |> Option.defaultValue 0
-  let height = Seq.length lines
+  let height = Seq.length lines - 1
   let grid = Array2D.create width height Garden
 
-  lines |> Seq.indexed |> Seq.fold fold (None, grid) |> function
-                                                        | (Some (x, y), grid) -> (x, y), grid
-                                                        | None, _ -> failwith "no start"
+  lines
+  |> Seq.indexed
+  |> Seq.fold fold (None, grid)
+  |> function
+     | (Some (x, y), grid) -> (x, y), grid
+     | None, _ -> failwith "no start"
   
 let start, grid = parse testInput
 
@@ -129,7 +132,7 @@ let walk' target start grid =
   |> Map.ofList
   |> loop 0 Set.empty
 
-walk 6 start grid
+walk' 6 start grid
 
 #!markdown
 
@@ -228,3 +231,72 @@ let input = fetchInput 21 |> Async.AwaitTask |> Async.RunSynchronously
 
 let start, grid = parse input
 walk start 64 grid
+
+#!markdown
+
+## part 2
+
+Ok that wrapped 1. just implementing the alg they described. Looks like there are some examples in step 2 to make sure our infinite map is working.
+
+#!fsharp
+
+let neighbors (x, y) grid =
+  let w = Array2D.length1 grid
+  let h = Array2D.length2 grid
+
+  let translate (x', y') =
+    let x' = x' % w
+    let y' = y' % h
+    (if x' < 0 then w else 0) + x', (if y' < 0 then h else 0) + y'
+
+  let choose (x, y) =
+    (x,y) |> translate |> isGarden grid |> Option.map (function _ -> (x,y))
+
+  [(x, y - 1); (x, y + 1); (x - 1, y); (x + 1, y)]
+  |> List.choose choose
+
+let testStart, testGrid = parse testInput
+
+[0,0;10,10;-16,5] |> List.map (fun pt -> neighbors pt testGrid)
+
+#!markdown
+
+Ok I'm confused - why are the dimensions 11 X 12 not 11 X 11?
+
+#!fsharp
+
+let print grid =
+  let w = Array2D.length1 grid
+  let h = Array2D.length2 grid
+
+  seq { for y in 0 .. h - 1 do
+          for x in 0 .. w - 1 do
+            match Array2D.get grid x y with
+            | Garden -> '.'
+            | Rock -> '#'
+            | _ -> failwith "invalid input"
+          '\n' }
+  |> Seq.map string |> String.concat ""
+
+testGrid |> print |> printfn "%s"
+
+#!markdown
+
+Ok. with infinite map do we get the same number for pt 1?
+
+#!fsharp
+
+let input = fetchInput 21 |> Async.AwaitTask |> Async.RunSynchronously
+
+let start, grid = parse input
+
+let walk start stepTarget grid = 
+  let neighbors tile = grid |> neighbors tile |> Set.ofSeq
+  let rec loop steps =
+    if steps = stepTarget then id
+    else
+      Set.map neighbors >> Set.unionMany >> loop (steps + 1)
+
+  start |> Set.singleton |> loop 0
+
+walk start 10 grid
