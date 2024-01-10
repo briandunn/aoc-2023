@@ -67,17 +67,18 @@ parse testInput
 
 #!fsharp
 
-let neighbors (x,y) (grid: Grid) : Point list =
+module Part1 =
+  let neighbors (x,y) (grid: Grid) : Point list =
 
-  let choose (direction, pt) =
-    Map.tryFind pt grid
-    |> function
-      | Some (Slope slopeDirection) when direction = slopeDirection -> Some pt
-      | Some Path -> Some pt
-      | _ -> None
+    let choose (direction, pt) =
+      Map.tryFind pt grid
+      |> function
+        | Some (Slope slopeDirection) when direction = slopeDirection -> Some pt
+        | Some Path -> Some pt
+        | _ -> None
 
-  [ Left, (x-1,y); Right, (x+1,y); Up, (x,y-1); Down, (x,y+1) ]
-  |> List.choose choose
+    [ Left, (x-1,y); Right, (x+1,y); Up, (x,y-1); Down, (x,y+1) ]
+    |> List.choose choose
 
 #!fsharp
 
@@ -101,52 +102,73 @@ let print (grid: Grid) (path: Point Set) =
             | None -> " "
   } |> String.concat "" |> printfn "%s"
 
-let traverse (grid: Grid) =
-  let neighbors (pt: Point) : Point Set = grid |> neighbors pt |> Set.ofList
-
-  let rec loop completed : (Point*Point Set) list -> (Point Set) list =
-    function
-    | [] -> completed
-    | (start,path) :: paths ->
-      let visited = Set.add start path
-      match path |> Set.difference (neighbors start) |> Set.toList with
-      | [] -> loop (visited::completed) paths
-      | neighbor :: neighbors -> loop completed ((neighbor, visited) :: (paths @ [for neighbor in neighbors -> neighbor, visited]))
-
+let findStartStop grid =
   let lastRow = rows grid
 
   let findStartStop ((start, stop): Point option * Point option) : Point*Tile -> Point option * Point option =
     function
-    | ((x, 0) as pt, Path) when start = None -> Some pt, stop
-    | ((x, y) as pt, Path) when stop = None && y = lastRow -> start, Some pt
+    | ((_, 0) as pt, Path) when start = None -> Some pt, stop
+    | ((_, y) as pt, Path) when stop = None && y = lastRow -> start, Some pt
     | _ -> start, stop
 
   grid
   |> Map.toSeq
   |> Seq.fold findStartStop (None, None)
   |> function
-     | Some start, Some stop -> loop [] [start, Set.empty] |> List.filter (Set.contains stop)
-     | _ -> failwith "missing start and / or stop"
+     | Some start, Some stop -> Some (start,stop)
+     | _ -> None
+
+#!fsharp
+
+module Part1 =
+  let traverse start (grid: Grid) =
+    let neighbors (pt: Point) : Point Set = grid |> Part1.neighbors pt |> Set.ofList
+
+    let rec loop completed : (Point*Point Set) list -> (Point Set) list =
+      function
+      | [] -> completed
+      | (start,path) :: paths ->
+        let visited = Set.add start path
+        match path |> Set.difference (neighbors start) |> Set.toList with
+        | [] -> loop (visited::completed) paths
+        | neighbor :: neighbors -> loop completed ((neighbor, visited) :: (paths @ [for neighbor in neighbors -> neighbor, visited]))
+
+    loop [] [start, Set.empty]
+
+  let solve grid =
+    let map (start,stop) =
+      (grid |> traverse start |> List.filter (Set.contains stop) |> List.map Set.count |> List.max) - 1
+    grid |> findStartStop |> Option.map map
 
 #!fsharp
 
 let testGrid = parse testInput
-let paths = traverse testGrid
 
-rows testGrid
-
-List.iter (print testGrid) paths
+Part1.solve testGrid
 
 #!fsharp
 
-// let part1 = (input |> parse |> traverse |> List.map Set.count |> List.max) - 1
-
-part1
-
-#!fsharp
-
-(input |> parse |> traverse |> List.map Set.count |> List.max) - 1
+input |> parse |> Part1.solve
 
 #!markdown
 
-Ok. Not to be too hammer so everything is a nail, but isn't this a case for a _reverse_ dijksta? ike, a priority queue that will return the longest path to any point?
+## Part 2
+
+More possible paths.
+
+Ok. Not to be too hammer so everything is a nail, but isn't this a case for a _reverse_ dijksta? like, a priority queue that will return the longest path to any point?
+
+#!fsharp
+
+module Part2 =
+  let neighbors (x,y) (grid: Grid) : Point list =
+
+    let choose pt =
+      Map.tryFind pt grid
+      |> function
+        | Some (Slope _) -> Some pt
+        | Some Path -> Some pt
+        | _ -> None
+
+    [x-1,y; x+1,y; x,y-1; x,y+1]
+    |> List.choose choose
