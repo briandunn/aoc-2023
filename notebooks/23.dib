@@ -1,0 +1,144 @@
+#!meta
+
+{"kernelInfo":{"defaultKernelName":"csharp","items":[{"aliases":[],"name":"csharp"},{"aliases":[],"languageName":"fsharp","name":"fsharp"}]}}
+
+#!markdown
+
+# 23 a maze
+
+#!fsharp
+
+#load "Aoc.fsx"
+
+let input = Aoc.fetchInput 23
+
+let testInput = "#.#####################
+#.......#########...###
+#######.#########.#.###
+###.....#.>.>.###.#.###
+###v#####.#v#.###.#.###
+###.>...#.#.#.....#...#
+###v###.#.#.#########.#
+###...#.#.#.......#...#
+#####.#.#.#######.#.###
+#.....#.#.#.......#...#
+#.#####.#.#.#########v#
+#.#...#...#...###...>.#
+#.#.#v#######v###.###v#
+#...#.>.#...>.>.#.###.#
+#####v#.#.###v#.#.###.#
+#.....#...#...#.#.#...#
+#.#########.###.#.#.###
+#...###...#...#...#.###
+###.###.#.###v#####v###
+#...#...#.#.>.>.#.>.###
+#.###.###.#.###.#.#v###
+#.....###...###...#...#
+#####################.#
+"
+
+#!markdown
+
+## parse!
+
+another grid type with fast neighbor lookup. could be a 2D array.
+
+#!fsharp
+
+type Direction = Up | Down | Left | Right
+type Tile = Path | Forest | Slope of Direction
+type Point = int * int
+type Grid = Map<Point, Tile>
+
+let parse (input: string) : Grid =
+  seq { for y, line in Array.indexed <| input.Split('\n') do
+          for x, c in Seq.indexed line do
+            (x,y),
+            match c with
+            | '#' -> Forest
+            | '.' -> Path
+            | '>' -> Slope Right
+            | '<' -> Slope Left
+            | '^' -> Slope Up
+            | 'v' -> Slope Down
+            | _ -> failwith "invalid input" } |> Map.ofSeq
+
+parse testInput
+
+#!fsharp
+
+let neighbors (x,y) (grid: Grid) : Point list =
+
+  let choose (direction, pt) =
+    Map.tryFind pt grid
+    |> function
+      | Some (Slope slopeDirection) when direction = slopeDirection -> Some pt
+      | Some Path -> Some pt
+      | _ -> None
+
+  [ Left, (x-1,y); Right, (x+1,y); Up, (x,y-1); Down, (x,y+1) ]
+  |> List.choose choose
+
+#!fsharp
+
+let rows : Grid -> int =
+  Map.toSeq >> Seq.map (fst >> snd) >> Seq.max
+
+let print (grid: Grid) (path: Point Set) =
+  let rows = rows grid
+  let cols = grid |> Map.toSeq |> Seq.map (fst >> fst) |> Seq.max
+  seq { for y in 0..rows do
+          System.Environment.NewLine
+          for x in 0..cols do
+            match Map.tryFind (x,y) grid with
+            | _ when Set.contains (x,y) path -> "O" 
+            | Some Forest -> "#"
+            | Some Path -> "."
+            | Some (Slope Right) -> ">"
+            | Some (Slope Left) -> "<"
+            | Some (Slope Up) -> "^"
+            | Some (Slope Down) -> "v"
+            | None -> " "
+  } |> String.concat "" |> printfn "%s"
+
+let traverse (grid: Grid) =
+  let neighbors (pt: Point) : Point Set = grid |> neighbors pt |> Set.ofList
+
+  let rec loop completed : (Point*Point Set) list -> (Point Set) list =
+    function
+    | [] -> completed
+    | (start,path) :: paths ->
+      let visited = Set.add start path
+      match path |> Set.difference (neighbors start) |> Set.toList with
+      | [] -> loop (visited::completed) paths
+      | neighbor :: neighbors -> loop completed ((neighbor, visited) :: (paths @ [for neighbor in neighbors -> neighbor, visited]))
+
+  let lastRow = rows grid
+
+  let findStartStop ((start, stop): Point option * Point option) : Point*Tile -> Point option * Point option =
+    function
+    | ((x, 0) as pt, Path) when start = None -> Some pt, stop
+    | ((x, y) as pt, Path) when stop = None && y = lastRow -> start, Some pt
+    | _ -> start, stop
+
+  grid
+  |> Map.toSeq
+  |> Seq.fold findStartStop (None, None)
+  |> function
+     | Some start, Some stop -> loop [] [start, Set.empty] |> List.filter (Set.contains stop)
+     | _ -> failwith "missing start and / or stop"
+
+#!fsharp
+
+let testGrid = parse testInput
+let paths = traverse testGrid
+
+rows testGrid
+
+List.iter (print testGrid) paths
+
+#!fsharp
+
+let part1 = (input |> parse |> traverse |> List.map Set.count |> List.max) - 1
+
+part1
