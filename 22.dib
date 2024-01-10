@@ -74,52 +74,46 @@ Since this is an iterative process that modifies a state (settled bricks) we can
 
 #!fsharp
 
-let columnHeights bricks =
-  let map _ = Seq.map snd >> Seq.max
+let updateColumnHeights brick columnHeights =
+  let fold acc column =
+    Map.change column (Option.defaultValue 0 >> (brick |> Brick.topZ |> max) >> Some) acc
+    
+  brick |> Brick.occupiedColumns |> Seq.fold fold columnHeights
 
-  seq { for brick in bricks do
-          for column in Brick.occupiedColumns brick do
-            yield column, Brick.topZ brick }
-  |> Seq.groupBy fst
-  |> Map.ofSeq
-  |> Map.map map
+let columnHeights =
+  let fold acc brick = updateColumnHeights brick acc
+
+  Seq.fold fold Map.empty
 
 columnHeights (parse testInput)
 
 #!fsharp
 
-let settle : Brick seq -> Brick seq =
-  let fold (settled: Brick seq) (brick: Brick) : Brick seq =
-     let heights = columnHeights settled
-     let height col = heights |> Map.tryFind col |> Option.defaultValue 0
-     let newZ = brick |> Brick.occupiedColumns |> Seq.map height |> Seq.max |> (+) 1
-     seq { yield! settled; Brick.putZ newZ brick }
-
-  Seq.sortBy Brick.z >> Seq.fold fold Seq.empty
-
-testInput |> parse |> settle
-
-#!markdown
-
-That seems to work. Now to detect which can be disintegrated. Empirically it seems to be   
-
-1) all bricks that share a Z
-2) any brick at the top
+let printHeights columnHeights =
+  if columnHeights |> Map.isEmpty |> not then
+    let keys = columnHeights |> Map.keys
+    seq { for y in 0 .. (keys |> Seq.map snd |> Seq.max) do
+            for x in 0 .. (keys |> Seq.map fst |> Seq.max) do
+              match Map.tryFind (x, y) columnHeights with
+              | Some z -> string z
+              | None -> "0"
+            "\n"
+    } |> String.concat "" |> printfn "%s"
 
 #!fsharp
 
-let disintegratable (bricks: Brick seq) =
-  let byZ = bricks |> Seq.groupBy Brick.z |> Seq.sortBy fst |> Seq.rev
-  let topCount = Seq.tryHead byZ |> Option.map (snd >> Seq.length) |> Option.defaultValue 0
-  byZ |> Seq.tail |> Seq.map (snd >> Seq.length) |> Seq.filter ((<) 1) |> Seq.sum |> (+) topCount
+let settle : Brick seq -> Brick seq =
+  let fold (settled, heights) brick =
+     let height col = heights |> Map.tryFind col |> Option.defaultValue 0
+     let newZ = brick |> Brick.occupiedColumns |> Seq.map height |> Seq.max |> (+) 1
+     let brick = Brick.putZ newZ brick
+     let heights = updateColumnHeights brick heights
 
-testInput |> parse |> settle |> disintegratable
+     brick::settled, heights
 
-// [1;2;3] |> Seq.filter ((<) 1)
+  Seq.fold fold ([], Map.empty) >> fst >> List.rev >> Seq.ofList
 
-#!markdown
-
-doubt its that simple, but lets check.
+testInput |> parse |> settle
 
 #!fsharp
 
@@ -135,7 +129,7 @@ let fetchInput day =
 
 let input = fetchInput 22 |> Async.AwaitTask |> Async.RunSynchronously
 
-let settled = input |> parse |> settle
+let settled = input |> parse |> Seq.sortBy Brick.z |> settle
 
 // 1486 was too high
 // 505 is too low
@@ -151,30 +145,28 @@ did the `z` of any *other* brick change?
 
 #!fsharp
 
-let canDisintegrate (settled: Brick seq) =
+let canDisintegrate' (settled: Brick seq) =
   let byTopZ = settled |> Seq.groupBy Brick.topZ
   let byZ = settled |> Seq.groupBy Brick.z |> Map.ofSeq
-
-  // only need to re-settle the bricks that may be resting on bricks of this layer.
-  // that's all bricks with `z` = `topZ` + 1
-
-  // one reason this is wrong:
-  // settling bricks that share a topZ will shift those that are height 1 but not taller
-
-  // for each z 
-    // find all bricks with topZ = z
-    // find the holes
-    // do any of the bricks at z + 1 fit in the holes?
 
   seq {
     for topZ, bricks in byTopZ do
       let resting = Map.tryFind (topZ + 1) byZ |> Option.defaultValue Seq.empty |> Seq.map (Brick.occupiedColumns >> Set.ofSeq)
       for i in 0 .. Seq.length bricks - 1 do
         let occupied = bricks |> Seq.removeAt i |> Seq.map Brick.occupiedColumns |> Seq.concat |> Set.ofSeq
-        resting |> Seq.exists (Set.intersect occupied >> ((=) Set.empty)) |> not
-  } |> Seq.filter id |> Seq.length
+        if resting |> Seq.exists (Set.intersect occupied >> ((=) Set.empty)) |> not then
+          Seq.item i bricks
+  }
 
+let fallsWhenRemoved brick settled =
+  let removed = Seq.filter ((<>) brick) settled
 
+  removed
+  |> Set.ofSeq
+  |> Set.difference (Set.ofSeq (settle removed))
+
+let canDisintegrate settled =
+  seq { for brick in settled -> fallsWhenRemoved brick settled }
 
 testInput |> parse |> settle |> canDisintegrate
 
@@ -191,7 +183,7 @@ let settleIsIdempotent input =
   printfn "settled again: %A" settledAgain
   Set.ofSeq settled = Set.ofSeq settledAgain
 
-testInput |> parse |> Seq.take 2 |> settleIsIdempotent
+testInput |> parse |> settleIsIdempotent
 
 #!markdown
 
@@ -203,8 +195,44 @@ Ok. was two things - order of output and seq comparison.
 
 #!fsharp
 
-settled |> canDisintegrate
+// let part1 = settled |> canDisintegrate |> Seq.filter ((=) Set.empty) |> Seq.length
+
+part1
+
+#!markdown
+
+Ok sweet. now part 2. count the bricks that would fall for each removal.
+
+So we can start by removing the 522 from part 1 that we know result in 0.
+
+Then for the remaining bricks, we remove, settle, and count the changed bricks.
 
 #!fsharp
 
-printfn "%d" (settled |> Seq.length)
+settled |> Seq.length |> printfn "%d total bricks"
+
+// settled |> canDisintegrate |> Seq.map Set.count |> Seq.iter (printfn "%d would fall")
+
+// 81022 too low
+
+#!markdown
+
+Ok so but set comparison doesn't account for if bricks shift into being the same as another brick.
+
+#!fsharp
+
+let fallWhenRemoved brick settled =
+  let removed = Seq.filter ((<>) brick) settled
+  let settled = settle removed
+  removed |> Seq.map2 (<>) settled |> Seq.filter id |> Seq.length
+
+
+settled |> Seq.map (fun brick -> fallWhenRemoved brick settled) |> Seq.filter ((=) 0) |> Seq.length
+
+#!markdown
+
+Wow that was a lot faster than messing with sets. And changing `settle` to use a list was also a big performance improvement. Let's see part 2.
+
+#!fsharp
+
+settled |> Seq.map (fun brick -> fallWhenRemoved brick settled) |> Seq.sum
