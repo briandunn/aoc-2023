@@ -162,13 +162,117 @@ Ok. Not to be too hammer so everything is a nail, but isn't this a case for a _r
 
 module Part2 =
   let neighbors (x,y) (grid: Grid) : Point list =
-
     let choose pt =
       Map.tryFind pt grid
       |> function
-        | Some (Slope _) -> Some pt
-        | Some Path -> Some pt
+        | Some (Slope _) | Some Path -> Some pt
         | _ -> None
 
-    [x-1,y; x+1,y; x,y-1; x,y+1]
-    |> List.choose choose
+    List.choose choose [x-1,y; x+1,y; x,y-1; x,y+1]
+
+#!fsharp
+
+type 'a PQ = {
+  sortWith: 'a -> 'a -> int
+  list: 'a list
+}
+
+module PQ =
+  let empty sortWith = {sortWith = sortWith; list = []}
+  let add (item: 'a) (pq: 'a PQ) = {pq with list = List.sortWith pq.sortWith (item::pq.list)}
+  let pop (pq: 'a PQ) : 'a option * 'a PQ = 
+     match pq.list with
+     | head::tail -> Some head, {pq with list = tail}
+     | [] -> None, pq
+
+#!fsharp
+
+let pq = [5;2;7] |> List.fold (fun pq i -> PQ.add i pq) (PQ.empty (fun x y -> x - y))
+
+PQ.pop pq
+
+#!fsharp
+
+type Weights = Map<int, Point list> * Map<Point, int>
+
+module Weights =
+  let empty : Weights = Map.empty, Map.empty
+
+  let add weight point ((pq, map) : Weights) : Weights =
+    let change =
+      function
+      | Some points -> List.distinct (point::points)
+      | None -> [point]
+      >> Some
+    (Map.change weight change pq, Map.add point weight map)
+
+  let tryFind (pt: Point) ((_, map):Weights) : int option = Map.tryFind pt map
+
+  let rec private pop f ((pq, map) as weights) =
+    if Map.isEmpty pq then None, weights
+    else
+      match f pq with
+      | weight, point::rest -> (Some (weight, point)), (Map.add weight rest pq, Map.remove point map)
+      | weight, [] -> pop f (Map.remove weight pq, map)
+
+  let popMax: Weights -> ((int*Point) option)*Weights = pop Map.maxKeyValue
+  let popMin: Weights -> ((int*Point) option)*Weights = pop Map.minKeyValue
+
+#!fsharp
+
+module Part2 =
+  let traverse (start: Point) (stop: Point) (grid: Grid) =
+    let neighbors (pt: Point) : Point list = Part2.neighbors pt grid
+
+    let rec loop (path: Map<Point,Point>) =
+      Weights.popMin
+      >> function
+      | Some (currentWeight, point), weights ->
+        let updateWeights ((path, weights) as acc) (neighbor: Point) =
+          match Weights.tryFind neighbor weights with
+          | Some previousWeight ->
+              let nextWeight = currentWeight + 1
+              if nextWeight < previousWeight then
+                Map.add neighbor point path, Weights.add nextWeight neighbor weights
+              else acc
+          | None -> acc
+
+        let path, weights = point |> neighbors |> List.fold updateWeights (path, weights)
+
+        loop path weights
+      | None, _ -> path
+        
+
+    let buildWeights acc point tile =
+      match tile with
+      | Path | Slope _ -> Weights.add (if point = start then 0 else System.Int32.MaxValue) point acc
+      | _ -> acc
+
+    let weights = Map.fold buildWeights Weights.empty grid
+
+    loop Map.empty weights
+
+  let buildPath start stop path =
+    let rec loop =
+      function
+      | [] -> []
+      | (head::_) as p ->
+        match Map.tryFind head path with
+        | Some nextPoint -> loop (nextPoint::p)
+        | None -> p
+
+    loop [stop]
+
+  let solve grid =
+    let map (start, stop) =
+      let path = grid |> traverse start stop |> buildPath start stop
+      path |> Set.ofList |> print grid
+      List.length path - 1
+    grid |> findStartStop |> Option.map map
+
+#!fsharp
+
+testInput |> parse |> Part2.solve
+
+// 1938 is too low
+// 4810 is too low
