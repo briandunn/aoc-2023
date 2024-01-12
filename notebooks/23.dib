@@ -148,7 +148,7 @@ Part1.solve testGrid
 
 #!fsharp
 
-input |> parse |> Part1.solve
+// input |> parse |> Part1.solve
 
 #!markdown
 
@@ -245,7 +245,8 @@ module Part2 =
 
     let buildWeights acc point tile =
       match tile with
-      | Path | Slope _ -> Weights.add (if point = start then 0 else System.Int32.MaxValue) point acc
+      // | Path | Slope _ -> Weights.add (if point = start then System.Int32.MaxValue else 0) point acc
+      | Path | Slope _ -> Weights.add (if point = start then  0 else System.Int32.MaxValue) point acc
       | _ -> acc
 
     let weights = Map.fold buildWeights Weights.empty grid
@@ -276,3 +277,51 @@ testInput |> parse |> Part2.solve
 
 // 1938 is too low
 // 4810 is too low
+
+#!markdown
+
+Looks like the whole idea of inverse Djikstra is off. So optimizing the "take all paths and choose the longest" approach.
+
+First we can collapse the map to a graph with edges that represent the length of the segments without options. This will reduce the total data we must deal with.
+
+#!fsharp
+
+type Edge = { start: Point; stop: Point; dist: int }
+
+let findEdges start (grid: Grid) =
+  let rec loop grid =
+    function
+    | (start, current, dist)::rest ->
+      // what if the neighbor cords are in an already visited vertex?
+         // need to add the vertex and end the edge
+      match Part2.neighbors current grid with
+      | [neighbor] -> loop (Map.remove neighbor grid) ((start, neighbor, dist+1)::rest)
+      | _ as neighbors ->
+        let grid = List.fold (fun acc n -> Map.remove n acc) grid neighbors
+        let edge = { start = start
+                     stop  = current
+                     dist  = dist }
+        edge :: loop grid (rest @ (List.map (fun n -> current, n, 1 ) neighbors))
+    | [] -> []
+
+  let grid = Map.fold Set.empty grid
+
+  loop (Map.remove start grid) [start,start,0]
+
+#!fsharp
+
+let grid = parse testInput
+
+let edges = grid |> findStartStop |> Option.map (fun (start, stop) ->printfn "%A" stop; findEdges start grid )
+
+
+edges |> Option.iter (fun edges ->
+  let starts = List.map (fun e -> e.start) edges |> Set.ofList
+  let stops = List.map (fun e -> e.stop) edges |> Set.ofList
+  let verts = Set.intersect starts stops
+  print grid verts
+  printfn "starts:%A" (Set.difference starts verts)
+  printfn "stops:%A" (Set.difference stops verts)
+)
+
+edges
