@@ -289,39 +289,85 @@ First we can collapse the map to a graph with edges that represent the length of
 type Edge = { start: Point; stop: Point; dist: int }
 
 let findEdges start (grid: Grid) =
-  let rec loop grid =
-    function
-    | (start, current, dist)::rest ->
-      // what if the neighbor cords are in an already visited vertex?
-         // need to add the vertex and end the edge
-      match Part2.neighbors current grid with
-      | [neighbor] -> loop (Map.remove neighbor grid) ((start, neighbor, dist+1)::rest)
-      | _ as neighbors ->
-        let grid = List.fold (fun acc n -> Map.remove n acc) grid neighbors
-        let edge = { start = start
-                     stop  = current
-                     dist  = dist }
-        edge :: loop grid (rest @ (List.map (fun n -> current, n, 1 ) neighbors))
-    | [] -> []
+  let neighbors (x, y) grid = [x-1,y; x+1,y; x,y-1; x,y+1] |> List.filter (fun n -> Set.contains n grid)
 
-  let grid = Map.fold Set.empty grid
+  let follow start =
+    let rec loop current dist grid =
+      let grid = Set.remove current grid
+      neighbors current grid
+      |> function
+      | [neighbor] -> loop neighbor (dist + 1) grid
+      | neighbors -> dist, (current, neighbors), grid
+    loop start 1
 
-  loop (Map.remove start grid) [start,start,0]
+  let rec loop (grid: Point Set) edges verts =
+    if Map.isEmpty verts then edges
+    else
+      let neighbor, current = Map.minKeyValue verts
+      let grid = Set.remove current grid
+      match follow neighbor grid with
+      | dist, (stop, []), grid ->
+        let edges = match Map.tryFind stop verts with
+                    | Some stop when stop = current -> edges
+                    | Some stop -> {dist = dist + 1; start = current; stop = stop}::edges
+                    | None -> {dist = dist; start = current; stop = stop}::edges
+        loop grid edges (verts |> Map.remove neighbor)
+      | dist, (vert, neighbors), grid ->
+        let edges = {dist = dist; start = current; stop = vert}::edges
+        let verts = List.fold (fun acc n -> Map.add n vert acc) verts neighbors
+        loop grid edges (Map.remove neighbor verts)
+
+
+  let onlyPath (acc: Point Set) (pt: Point) (tile: Tile) : Point Set =
+    match tile with
+    | Path | Slope _ -> Set.add pt acc
+    | _ -> acc
+
+  let grid = grid |> Map.fold onlyPath Set.empty
+
+  [for neighbor in neighbors start grid -> neighbor, start] |> Map.ofList |> loop grid [] 
 
 #!fsharp
 
-let grid = parse testInput
+module P2 =
+  let foldEdges acc {start = start; stop = stop; dist = dist} =
+    let change stop =
+      function
+      | None -> Map.ofList [stop, dist]
+      | Some ends -> Map.add stop dist ends
+      >> Some
+    acc |> Map.change start (change stop) |> Map.change stop (change start)
 
-let edges = grid |> findStartStop |> Option.map (fun (start, stop) ->printfn "%A" stop; findEdges start grid )
+  let traverse start paths =
+    let neighbors pt = paths |> Map.tryFind pt |> Option.defaultValue Map.empty |> Map.keys |> Set.ofSeq
+
+    let rec loop completed : (Point*Point list) list -> (Point list) list =
+      function
+      | [] -> completed
+      | (start,path) :: paths ->
+        let visited = start::path
+        match path |> Set.ofList |> Set.difference (neighbors start) |> Set.toList with
+        | [] -> loop (visited::completed) paths
+        | neighbor :: neighbors -> loop completed ((neighbor, visited) :: (paths @ [for neighbor in neighbors -> neighbor, visited]))
+
+    loop [] [start, []]
+
+  let measure edges = List.pairwise >> List.map (fun (a,b) -> edges |> Map.find a |> Map.find b) >> List.sum
 
 
-edges |> Option.iter (fun edges ->
-  let starts = List.map (fun e -> e.start) edges |> Set.ofList
-  let stops = List.map (fun e -> e.stop) edges |> Set.ofList
-  let verts = Set.intersect starts stops
-  print grid verts
-  printfn "starts:%A" (Set.difference starts verts)
-  printfn "stops:%A" (Set.difference stops verts)
-)
+  let solve (input: string) =
+    let withEnds grid (start, stop) =
+        let edges = grid |> findEdges start
+        printfn "edges:%d" (List.length edges)
+        let edgeMap = List.fold foldEdges Map.empty edges
+        let paths =   edgeMap |> traverse start |> List.filter (function head::_ when head = stop -> true | _ -> false)
+        printfn "paths:%d" (List.length paths)
+        paths |> List.map (measure edgeMap) |> List.max
 
-edges
+    let grid = parse input
+    
+    grid |> findStartStop |> Option.map (withEnds grid)
+
+#!fsharp
+
+P2.solve testInput
