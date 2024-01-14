@@ -338,17 +338,17 @@ module P2 =
       >> Some
     acc |> Map.change start (change stop) |> Map.change stop (change start)
 
-  let traverse start paths =
+  let traverse start stop paths =
     let neighbors pt = paths |> Map.tryFind pt |> Option.defaultValue Map.empty |> Map.keys |> Set.ofSeq
 
     let rec loop completed : (Point*Point list) list -> (Point list) list =
       function
       | [] -> completed
       | (start,path) :: paths ->
-        let visited = start::path
-        match path |> Set.ofList |> Set.difference (neighbors start) |> Set.toList with
-        | [] -> loop (visited::completed) paths
-        | neighbor :: neighbors -> loop completed ((neighbor, visited) :: (paths @ [for neighbor in neighbors -> neighbor, visited]))
+        match start::path, path |> Set.ofList |> Set.difference (neighbors start) |> Set.toList with
+        | (head::rest as visited), []  when head = stop -> loop (visited::completed) paths
+        | _, [] -> loop completed paths // dead end
+        | visited, neighbor :: neighbors -> loop completed ((neighbor, visited) :: (paths @ [for neighbor in neighbors -> neighbor, visited]))
 
     loop [] [start, []]
 
@@ -360,8 +360,10 @@ module P2 =
         let edges = grid |> findEdges start
         printfn "edges:%d" (List.length edges)
         let edgeMap = List.fold foldEdges Map.empty edges
-        let paths =   edgeMap |> traverse start |> List.filter (function head::_ when head = stop -> true | _ -> false)
+        printfn "verts:%d" (Map.count edgeMap)
+        let paths = edgeMap |> traverse start stop
         printfn "paths:%d" (List.length paths)
+        paths |> List.iter (printfn "%A")
         paths |> List.map (measure edgeMap) |> List.max
 
     let grid = parse input
