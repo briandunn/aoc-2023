@@ -339,18 +339,24 @@ module P2 =
     acc |> Map.change start (change stop) |> Map.change stop (change start)
 
   let traverse start stop paths =
-    let neighbors pt = paths |> Map.tryFind pt |> Option.defaultValue Map.empty |> Map.keys |> Set.ofSeq
+    let popNeighbors start paths =
+      let neighbors = paths |> Map.tryFind start |> Option.defaultValue Map.empty |> Map.keys |> List.ofSeq
+      let fold acc neighbor = Map.change neighbor (Option.map (Map.remove start)) acc
+      let paths = List.fold fold (Map.remove start paths) neighbors
+      neighbors, paths
 
-    let rec loop completed : (Point*Point list) list -> (Point list) list =
+    let rec loop (completed: Point list list): (Point list * Map<Point,Map<Point,int>>) list -> Point list list =
       function
       | [] -> completed
-      | (start,path) :: paths ->
-        match start::path, path |> Set.ofList |> Set.difference (neighbors start) |> Set.toList with
-        | (head::rest as visited), []  when head = stop -> loop (visited::completed) paths
-        | _, [] -> loop completed paths // dead end
-        | visited, neighbor :: neighbors -> loop completed ((neighbor, visited) :: (paths @ [for neighbor in neighbors -> neighbor, visited]))
-
-    loop [] [start, []]
+      | ([],_)::_ -> completed
+      | ((head::rest) as path, unvisited) :: tail ->
+        let neighbors, unvisited = popNeighbors head unvisited
+        match neighbors with
+        | [] when head = stop -> loop (path::completed) tail
+        | [] -> loop completed tail // dead end
+        | neighbor :: neighbors -> loop completed ((neighbor::path, unvisited) :: (tail @ [for neighbor in neighbors -> neighbor::path, unvisited]))
+ 
+    loop [] [[start], paths]
 
   let measure edges = List.pairwise >> List.map (fun (a,b) -> edges |> Map.find a |> Map.find b) >> List.sum
 
