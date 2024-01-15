@@ -346,19 +346,18 @@ module P2 =
       let paths = List.fold fold (Map.remove start paths) neighbors
       neighbors, paths
 
-    let rec loop (completed: Point list list): (Point list * Map<Point,Map<Point,int>>) list -> Point list list =
+    let rec loop: (Point list * Map<Point,Map<Point,int>>) list -> (Point list * (Point list * Map<Point,Map<Point,int>>) list) option =
       function
-      | [] -> completed
-      | ([],_)::_ -> completed
+      | [] -> None
+      | ([],_)::_ -> None
       | ((head::rest) as path, unvisited) :: tail ->
-        printfn "head:%A\tcompleted:%d" head (List.length completed)
         let neighbors, unvisited = popNeighbors head unvisited
         match neighbors with
-        | [] when head = stop -> loop (path::completed) tail
-        | [] -> loop completed tail // dead end
-        | neighbor :: neighbors -> loop completed ((neighbor::path, unvisited) :: (tail @ [for neighbor in neighbors -> neighbor::path, unvisited]))
+        | [] when head = stop -> Some (path, tail)
+        | [] -> loop tail // dead end
+        | neighbor :: neighbors -> loop ((neighbor::path, unvisited) :: (tail @ [for neighbor in neighbors -> neighbor::path, unvisited]))
  
-    loop [] [[start], paths]
+    Seq.unfold loop [[start], paths]
 
 
   let measure edges = List.pairwise >> List.map (fun (a,b) -> edges |> Map.find a |> Map.find b) >> List.sum
@@ -371,9 +370,8 @@ module P2 =
         let edgeMap = List.fold foldEdges Map.empty edges
         printfn "verts:%d" (Map.count edgeMap)
         let paths = edgeMap |> traverse start stop
-        printfn "paths:%d" (List.length paths)
-        paths |> List.iter (printfn "%A")
-        paths |> List.map (measure edgeMap) |> List.max
+        paths |> Seq.iter (printfn "path:%A")
+        paths |> Seq.map (measure edgeMap) |> Seq.max
 
     let grid = parse input
     
