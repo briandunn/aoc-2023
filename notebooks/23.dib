@@ -342,6 +342,7 @@ module P2 =
     let popNeighbors start paths =
       let neighbors = paths |> Map.tryFind start |> Option.defaultValue Map.empty |> Map.keys |> List.ofSeq
       let fold acc neighbor = Map.change neighbor (Option.map (Map.remove start)) acc
+
       let paths = List.fold fold (Map.remove start paths) neighbors
       neighbors, paths
 
@@ -350,6 +351,7 @@ module P2 =
       | [] -> completed
       | ([],_)::_ -> completed
       | ((head::rest) as path, unvisited) :: tail ->
+        printfn "head:%A\tcompleted:%d" head (List.length completed)
         let neighbors, unvisited = popNeighbors head unvisited
         match neighbors with
         | [] when head = stop -> loop (path::completed) tail
@@ -357,6 +359,7 @@ module P2 =
         | neighbor :: neighbors -> loop completed ((neighbor::path, unvisited) :: (tail @ [for neighbor in neighbors -> neighbor::path, unvisited]))
  
     loop [] [[start], paths]
+
 
   let measure edges = List.pairwise >> List.map (fun (a,b) -> edges |> Map.find a |> Map.find b) >> List.sum
 
