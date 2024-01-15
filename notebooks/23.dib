@@ -355,7 +355,7 @@ module P2 =
         match neighbors with
         | [] when head = stop -> Some (path, tail)
         | [] -> loop tail // dead end
-        | neighbor :: neighbors -> loop ((neighbor::path, unvisited) :: (tail @ [for neighbor in neighbors -> neighbor::path, unvisited]))
+        | neighbors -> loop ([for neighbor in neighbors -> neighbor::path, unvisited] @ tail)
  
     Seq.unfold loop [[start], paths]
 
@@ -370,8 +370,7 @@ module P2 =
         let edgeMap = List.fold foldEdges Map.empty edges
         printfn "verts:%d" (Map.count edgeMap)
         let paths = edgeMap |> traverse start stop
-        paths |> Seq.iter (printfn "path:%A")
-        paths |> Seq.map (measure edgeMap) |> Seq.max
+        paths |> Seq.map (measure edgeMap) |> Seq.distinct |> Seq.max
 
     let grid = parse input
     
@@ -379,4 +378,4 @@ module P2 =
 
 #!fsharp
 
-P2.solve testInput
+P2.solve input
