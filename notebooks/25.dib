@@ -1,0 +1,134 @@
+#!meta
+
+{"kernelInfo":{"defaultKernelName":"csharp","items":[{"aliases":[],"name":"csharp"}]}}
+
+#!markdown
+
+# [Day 25](https://adventofcode.com/2023/day/25) - cut the cord
+
+find three edges hat when removed breaks the graph in two
+
+#!value
+
+#!value --name testInput
+
+jqt: rhn xhk nvd
+rsh: frs pzl lsr
+xhk: hfx
+cmg: qnr nvd lhk bvb
+rhn: xhk bvb hfx
+bvb: xhk hfx
+pzl: lsr hfx nvd
+qnr: nvd
+ntq: jqt hfx bvb xhk
+nvd: lhk
+lsr: lhk
+rzs: qnr cmg lsr rsh
+frs: qnr lhk lsr
+
+#!fsharp
+
+#!share testInput --from value
+
+#!fsharp
+
+let parse (input: string) = 
+  seq {
+    for line in input.Split('\n') do
+      match line.Split(':') with
+      | [| key; values |] -> Some (key, Set.ofArray <| values.Trim().Split(' '))
+      | _ -> None
+  } |> Seq.choose id |> Map.ofSeq
+
+
+parse testInput
+
+#!fsharp
+
+let edges edgeMap =
+  Set.ofSeq <| seq {
+    for node,connections in Map.toSeq edgeMap do
+      for connection in connections -> min node connection, max node connection
+  }
+
+testInput |> parse |> edges
+
+#!fsharp
+
+let nodes (edgeMap: Map<string, string Set>) =
+  seq {
+    for node,connections in Map.toSeq edgeMap do
+      node; yield! (Set.toSeq connections)
+  } |> Set.ofSeq
+
+testInput |> parse |> nodes
+
+#!fsharp
+
+let toDot m =
+  let nodes = String.concat "\n" <| seq { for a,b in edges m -> sprintf "%s -- %s;" a b }
+  sprintf "graph {\n%s\n}\n" nodes
+
+testInput |> parse |> toDot
+
+#!html
+
+<img src="../graph.svg?x" />
+
+#!markdown
+
+Ok the thing I notice: All of the edges participate in cycles. Most are in triangles. Some are in squares. The three edges we want to cut are in hexagons. And they're the only edges that are only in hexagons. And 6 is the longest cycle.
+
+So maybe:
+
+Find the shortest cycle for each edge. If there are three with the longest cycles... we win?
+
+Ok so how do we find the shortest cycles for each edge. Could do Dikestra, but allow returning to the starting node. As soon as we do boom. Would have to do it from every node.
+
+#!fsharp
+
+#load "Aoc.fsx"
+open Aoc
+
+#!fsharp
+
+let tightestLoop ((a,b) as edge) (edges: (string*string) Set) =
+  let nodes = seq { for a,b in edges do a; b } |> Set.ofSeq
+  let edges = Set.remove edge edges
+  let neighborMap = Map.ofSeq <| seq {
+    for node in nodes do
+      let fold acc = 
+        function
+        | a,b when a = node -> Set.add b acc
+        | a,b when b = node -> Set.add a acc
+        | _ -> acc
+      node, edges |> Seq.fold fold Set.empty
+  }
+
+  let neighbors vertex = neighborMap |> Map.tryFind vertex |> Option.defaultValue Set.empty
+
+  let rec loop dest =
+    Weights.popMin
+    >> function
+    | Some (weight, current), _ when current = dest -> weight
+    | Some (weight, current), weights ->
+      let updateWeights weights neighbor = 
+        let nextWeight = weight + 1
+        match Weights.tryFind neighbor weights with
+        | Some previousWeight when nextWeight < previousWeight -> Weights.add nextWeight neighbor weights
+        | _ -> weights
+      current
+      |> neighbors
+      |> Set.fold updateWeights weights
+      |> loop dest
+    | None, _ -> 0
+
+  let weigh weights node = Weights.add (if node = b then 0 else System.Int32.MaxValue) node weights
+
+  nodes
+  |> Set.fold weigh Weights.empty
+  |> loop a  
+
+
+let edges = testInput |> parse |> edges
+seq { for edge in edges do tightestLoop edge edges } |> Seq.iter (printfn "%A")

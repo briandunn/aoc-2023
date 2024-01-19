@@ -1,0 +1,133 @@
+#!meta
+
+{"kernelInfo":{"defaultKernelName":"csharp","items":[{"aliases":[],"name":"csharp"}]}}
+
+#!markdown
+
+# Day 24
+
+velocity stuff - intersection of lines
+
+#!fsharp
+
+#load "Aoc.fsx"
+
+let testInput = "19, 13, 30 @ -2,  1, -2
+18, 19, 22 @ -1, -1, -2
+20, 25, 34 @ -2, -2, -4
+12, 31, 28 @ -1, -2, -1
+20, 19, 15 @  1, -5, -3
+"
+
+let parse (input: string) =
+  let parseVector (vector: string) = 
+    match vector.Split(',') with
+    | [| x; y; z |] -> Some (decimal x, decimal y, decimal z)
+    | _ -> None
+
+  let parseLine (line: string) = 
+    match line.Split('@') |> Array.map parseVector with
+    | [| Some pos; Some vel |] -> Some (pos, vel)
+    | _ -> None
+
+
+  input.Split('\n') |> Seq.choose parseLine
+
+#!fsharp
+
+parse testInput
+
+#!fsharp
+
+let intersectionPoint ((xi,yi,_), (xv,yv,_)) ((xi',yi',_), (xv',yv',_)) =
+  // https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection#Given_two_line_equations
+
+  try
+    let t x = (x - xi) / xv
+    let t' x = (x - xi') / xv'
+
+    let m = yv / xv
+    let b = yi - m * xi
+
+    let m' = yv' / xv'
+    let b' = yi' - m' * xi'
+
+    let x = (b' - b) / (m - m')
+
+    if t x > 0M && t' x > 0M then Some (x, m * x + b) else None
+  with
+  | :? System.DivideByZeroException -> None
+
+#!fsharp
+
+testInput |> parse |> Seq.take 2 |> Seq.toList |> function a::b::_ -> intersectionPoint a b
+
+#!fsharp
+
+let rec comb n l = 
+    match n, l with
+    | 0, _ -> [[]]
+    | _, [] -> []
+    | k, (x::xs) -> List.map ((@) [x]) (comb (k-1) xs) @ comb k xs
+
+#!fsharp
+
+let part1 = 
+  parse
+  >> Seq.toList
+  >> comb 2
+  >> List.choose (function a::b::_ -> intersectionPoint a b)
+  >> List.filter (fun (x, y) -> List.forall (fun i -> i >= 200000000000000M && i <= 400000000000000M) [x;y])
+  >> List.length
+
+#!fsharp
+
+part1 testInput
+
+#!fsharp
+
+let input = Aoc.fetchInput 24
+
+#!fsharp
+
+part1 input
+
+#!markdown
+
+That was strangely easy. Maybe I wasn't supposed to recognize the algebra of it?
+
+# [Part 2](https://adventofcode.com/2023/day/24#part2)
+
+## 3D collisions 
+
+Where do I throw from, at t = 0, to hit every stone in 3D space? only integers.
+
+This seems like I'm finding the line that intersects every line. Hard to imagine T has anything to do with it. Maybe I'm missing something. But the T axis *is* the line.
+
+Or, since T must be positive, each hail stone is a ray.
+
+Also not solving for the slope of the intersecting line, just the xyz at t=0.
+
+I think that between any 2 3d rays there are infinite lines that intersect both.
+
+Add a third, however, and there is only 1.
+
+Let me refine that - for any three non-parallel lines.
+
+This is my hunch. so why do we have 
+
+#!fsharp
+
+input |> parse |> Seq.length
+
+#!markdown
+
+Let's investigate my hunch by seeing if any of these lines are parallel.
+
+#!fsharp
+
+input |> parse |> Seq.countBy snd |> Seq.length
+
+#!fsharp
+
+input |> parse |> Seq.map fst |> Seq.fold (fun (xm,ym,zm) (x,y,z) -> (min xm x), (min ym y), (min zm z) ) (System.Decimal.MaxValue,System.Decimal.MaxValue,System.Decimal.MaxValue)

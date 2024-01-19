@@ -193,12 +193,12 @@ PQ.pop pq
 
 #!fsharp
 
-type Weights = Map<int, Point list> * Map<Point, int>
+type 'a Weights when 'a:comparison = Map<int, 'a list> * Map<'a, int>
 
 module Weights =
-  let empty : Weights = Map.empty, Map.empty
+  let empty : 'a Weights = Map.empty, Map.empty
 
-  let add weight point ((pq, map) : Weights) : Weights =
+  let add weight point ((pq, map) : 'a Weights) : 'a Weights =
     let change =
       function
       | Some points -> List.distinct (point::points)
@@ -206,7 +206,7 @@ module Weights =
       >> Some
     (Map.change weight change pq, Map.add point weight map)
 
-  let tryFind (pt: Point) ((_, map):Weights) : int option = Map.tryFind pt map
+  let tryFind (pt: 'a) ((_, map): 'a Weights) : int option = Map.tryFind pt map
 
   let rec private pop f ((pq, map) as weights) =
     if Map.isEmpty pq then None, weights
@@ -215,8 +215,8 @@ module Weights =
       | weight, point::rest -> (Some (weight, point)), (Map.add weight rest pq, Map.remove point map)
       | weight, [] -> pop f (Map.remove weight pq, map)
 
-  let popMax: Weights -> ((int*Point) option)*Weights = pop Map.maxKeyValue
-  let popMin: Weights -> ((int*Point) option)*Weights = pop Map.minKeyValue
+  let popMax (weights: 'a Weights): ((int*'a) option)*'a Weights when 'a:comparison = pop Map.maxKeyValue weights
+  let popMin (weights: 'a Weights): ((int*'a) option)*'a Weights when 'a:comparison = pop Map.minKeyValue weights
 
 #!fsharp
 
@@ -330,7 +330,8 @@ let findEdges start (grid: Grid) =
 #!fsharp
 
 module P2 =
-  let foldEdges acc {start = start; stop = stop; dist = dist} =
+  type EdgeMap = Map<Point, Map<Point, int>>
+  let foldEdges acc {start = start; stop = stop; dist = dist} : EdgeMap =
     let change stop =
       function
       | None -> Map.ofList [stop, dist]
@@ -338,15 +339,16 @@ module P2 =
       >> Some
     acc |> Map.change start (change stop) |> Map.change stop (change start)
 
+  let popNeighbors start paths =
+    let neighbors = paths |> Map.tryFind start |> Option.defaultValue Map.empty |> Map.keys |> List.ofSeq
+    let fold acc neighbor = Map.change neighbor (Option.map (Map.remove start)) acc
+
+    let paths = List.fold fold (Map.remove start paths) neighbors
+    neighbors, paths
+
   let traverse start stop paths =
-    let popNeighbors start paths =
-      let neighbors = paths |> Map.tryFind start |> Option.defaultValue Map.empty |> Map.keys |> List.ofSeq
-      let fold acc neighbor = Map.change neighbor (Option.map (Map.remove start)) acc
 
-      let paths = List.fold fold (Map.remove start paths) neighbors
-      neighbors, paths
-
-    let rec loop: (Point list * Map<Point,Map<Point,int>>) list -> (Point list * (Point list * Map<Point,Map<Point,int>>) list) option =
+    let rec loop: (Point list * EdgeMap) list -> ((Point list * ((Point list * EdgeMap)) list)) option =
       function
       | [] -> None
       | ([],_)::_ -> None
@@ -360,7 +362,7 @@ module P2 =
     Seq.unfold loop [[start], paths]
 
 
-  let measure edges = List.pairwise >> List.map (fun (a,b) -> edges |> Map.find a |> Map.find b) >> List.sum
+  let measure (edges: EdgeMap) = List.pairwise >> List.map (fun (a,b) -> edges |> Map.find a |> Map.find b) >> List.sum
 
 
   let solve (input: string) =
@@ -369,8 +371,7 @@ module P2 =
         printfn "edges:%d" (List.length edges)
         let edgeMap = List.fold foldEdges Map.empty edges
         printfn "verts:%d" (Map.count edgeMap)
-        let paths = edgeMap |> traverse start stop
-        paths |> Seq.map (measure edgeMap) |> Seq.distinct |> Seq.max
+        edgeMap |> Map.values |> Seq.map Map.count |> Seq.toList  |> printfn "%A"
 
     let grid = parse input
     
@@ -379,3 +380,5 @@ module P2 =
 #!fsharp
 
 P2.solve input
+
+[1; 3; 3; 3; 3; 3; 4; 4; 4; 3; 4; 3; 4; 4; 3; 4; 4; 3; 4; 3; 4; 3; 4; 4; 4; 3; 4; 4; 3; 4; 3; 3; 3; 3; 3; 1] |> List.map bigint |> List.reduce (*)
