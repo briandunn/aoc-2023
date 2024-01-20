@@ -90,15 +90,15 @@ module Neighbors =
 
 #!fsharp
 
-let toDot m =
-  let nodes = String.concat "\n" <| seq { for a,b in edges m -> sprintf "%s -- %s;" a b }
+let toDot edges =
+  let nodes = String.concat "\n" <| seq { for a,b in edges -> sprintf "%s -- %s;" a b }
   sprintf "graph {\n%s\n}\n" nodes
 
-testInput |> parse |> toDot
+testInput |> parse |> edges |> toDot
 
 #!html
 
-<img src="../graph.svg?x" />
+<img src="../graph.svg?y" />
 
 #!markdown
 
@@ -117,7 +117,7 @@ open Aoc
 
 #!fsharp
 
-let tightestLoop ((a,b) as edge) (edges: (string*string) Set) =
+let tightestLoop1 ((a,b) as edge) (edges: (string*string) Set) =
   let edges = Set.remove edge edges
   let neighborMap = Neighbors.fromEdges edges
   let neighbors vertex = neighborMap |> Map.tryFind vertex |> Option.defaultValue Set.empty
@@ -144,6 +144,29 @@ let tightestLoop ((a,b) as edge) (edges: (string*string) Set) =
   |> nodes
   |> Set.fold weigh Weights.empty
   |> loop a  
+
+
+let allEdges = testInput |> parse |> edges
+seq { for edge in allEdges do edge, tightestLoop1 edge allEdges } |> Seq.sortBy snd |> Seq.iter (printfn "%A")
+
+#!fsharp
+
+let tightestLoop ((a,b) as edge) (edges: (string*string) Set) =
+  let edges = Set.remove edge edges
+  let neighborMap = Neighbors.fromEdges edges
+
+  let rec loop neighborMap: (string*int) list -> int =
+    function
+    | (head,steps)::rest when head = b -> steps
+    | (head,steps)::rest ->
+      match Neighbors.tryPop head neighborMap with
+      | Some neighbors, neighborMap -> 
+        let steps = steps + 1
+        loop neighborMap (rest @ [for neighbor in neighbors -> neighbor, steps])
+      | None, neighborMap -> loop neighborMap rest
+    | [] -> 0
+
+  loop neighborMap [a,0] 
 
 
 let allEdges = testInput |> parse |> edges
@@ -184,12 +207,37 @@ let solve1 input =
   seq { for edge in edges do edge, tightestLoop edge edges }
   |> Seq.sortBy snd
   |> Seq.rev
-  |> Seq.take 3
-  |> Seq.map fst
-  |> Set.ofSeq
-  |> Set.difference edges
-  |> components
-  |> Seq.map (nodes >> Seq.length)
-  |> Seq.reduce (*)
+  |> Seq.iter (printfn "%A")
+  // |> Seq.map fst
+  // |> Seq.take 3
+  // |> Set.ofSeq
+  // |> Set.difference edges
+  // |> components
+  // |> Seq.map (nodes >> Seq.length)
+  // |> Seq.reduce (*)
 
 solve1 testInput
+
+#!fsharp
+
+let input = Aoc.fetchInput 25
+
+input |> parse |> edges |> toDot
+
+#!fsharp
+
+solve1 input
+
+// 1488 too low
+
+#!fsharp
+
+[("qfj", "tbq"); ("xmh", "xqt"); ("xgz", "xkg")] |> Set.ofList |> Set.difference (input |> parse |> edges) |> toDot
+
+#!markdown
+
+I had thoughts!
+
+Weights is overkill. Since edges have no cost and we're just counting them, to get the shortest loop we just fan out until we hit the other end. When we do that's the tightest loop.
+
+We should be able to find _all_ loops through a given node by traversing each edge once. Then we could remove that node, go on to another, and find all loops through it?
