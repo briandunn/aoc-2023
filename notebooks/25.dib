@@ -45,23 +45,48 @@ parse testInput
 
 #!fsharp
 
+let toEdge a b =
+  if a < b then a, b else b, a
+  
 let edges edgeMap =
   Set.ofSeq <| seq {
     for node,connections in Map.toSeq edgeMap do
-      for connection in connections -> min node connection, max node connection
+      for connection in connections -> toEdge node connection
   }
 
 testInput |> parse |> edges
 
 #!fsharp
 
-let nodes (edgeMap: Map<string, string Set>) =
-  seq {
-    for node,connections in Map.toSeq edgeMap do
-      node; yield! (Set.toSeq connections)
-  } |> Set.ofSeq
+let nodes (edges: (string*string) Set) = seq { for a,b in edges do a; b } |> Set.ofSeq
+testInput |> parse |> edges |> nodes
 
-testInput |> parse |> nodes
+#!fsharp
+
+type Neighbors = Map<string, Set<string>>
+module Neighbors =
+  let tryPop node (neighborMap: Neighbors) =
+    let map =
+      let fold neighborMap neighbor = Map.change neighbor (Option.map (Set.remove node)) neighborMap
+      Set.fold fold neighborMap
+
+    neighborMap
+    |> Map.tryFind node
+    |> function
+       | Some neighbors -> Some neighbors, map neighbors
+       | None -> None, neighborMap 
+
+  let fromEdges edges = 
+    let nodes = nodes edges
+    Map.ofSeq <| seq {
+      for node in nodes do
+        let fold acc = 
+          function
+          | a,b when a = node -> Set.add b acc
+          | a,b when b = node -> Set.add a acc
+          | _ -> acc
+        node, edges |> Seq.fold fold Set.empty
+    }
 
 #!fsharp
 
@@ -93,18 +118,8 @@ open Aoc
 #!fsharp
 
 let tightestLoop ((a,b) as edge) (edges: (string*string) Set) =
-  let nodes = seq { for a,b in edges do a; b } |> Set.ofSeq
   let edges = Set.remove edge edges
-  let neighborMap = Map.ofSeq <| seq {
-    for node in nodes do
-      let fold acc = 
-        function
-        | a,b when a = node -> Set.add b acc
-        | a,b when b = node -> Set.add a acc
-        | _ -> acc
-      node, edges |> Seq.fold fold Set.empty
-  }
-
+  let neighborMap = Neighbors.fromEdges edges
   let neighbors vertex = neighborMap |> Map.tryFind vertex |> Option.defaultValue Set.empty
 
   let rec loop dest =
@@ -125,10 +140,56 @@ let tightestLoop ((a,b) as edge) (edges: (string*string) Set) =
 
   let weigh weights node = Weights.add (if node = b then 0 else System.Int32.MaxValue) node weights
 
-  nodes
+  edges
+  |> nodes
   |> Set.fold weigh Weights.empty
   |> loop a  
 
 
-let edges = testInput |> parse |> edges
-seq { for edge in edges do tightestLoop edge edges } |> Seq.iter (printfn "%A")
+let allEdges = testInput |> parse |> edges
+seq { for edge in allEdges do edge, tightestLoop edge allEdges } |> Seq.sortBy snd |> Seq.iter (printfn "%A")
+
+#!markdown
+
+*boom* ok that looks promising. Let's sketch out a solve.
+
+#!fsharp
+
+let components =
+  let unfoldAll edges =
+    let neighborMap = Neighbors.fromEdges edges
+    let tryPopNeighbors node neighbors = neighborMap |> Map.tryFind node |> Option.defaultValue Set.empty
+    let unfoldOne =
+      function
+      | head::rest, neighborMap ->
+        match Neighbors.tryPop head neighborMap with
+        | Some neighbors, neighborMap -> Some (neighbors |> Set.toSeq |> Seq.map (toEdge head), (rest @ Set.toList neighbors, neighborMap))
+        | None, neighborMap -> Some (Seq.empty, (rest, neighborMap))
+      | [], _ -> None
+
+    edges
+    |> Seq.tryHead
+    |> Option.map (fun edge -> Seq.unfold unfoldOne ([fst edge], neighborMap) |> Seq.concat |> Set.ofSeq)
+    |> Option.map (fun comp -> comp, Set.difference edges comp)
+
+  Seq.unfold unfoldAll
+
+components <| Set.ofList ["a","b";"b","c";"d","e"]
+
+#!fsharp
+
+let solve1 input =
+  let edges = input |> parse |> edges
+
+  seq { for edge in edges do edge, tightestLoop edge edges }
+  |> Seq.sortBy snd
+  |> Seq.rev
+  |> Seq.take 3
+  |> Seq.map fst
+  |> Set.ofSeq
+  |> Set.difference edges
+  |> components
+  |> Seq.map (nodes >> Seq.length)
+  |> Seq.reduce (*)
+
+solve1 testInput
