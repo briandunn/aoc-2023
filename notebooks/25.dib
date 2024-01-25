@@ -76,6 +76,17 @@ module Neighbors =
        | Some neighbors -> Some neighbors, map neighbors
        | None -> None, neighborMap 
 
+  let pop node (neighborMap: Neighbors) =
+    let map =
+      let fold neighborMap neighbor = Map.change neighbor (Option.map (Set.remove node)) neighborMap
+      Set.fold fold neighborMap
+
+    neighborMap
+    |> Map.tryFind node
+    |> function
+       | Some neighbors -> neighbors, map neighbors
+       | None -> Set.empty, neighborMap 
+
   let fromEdges edges = 
     let nodes = nodes edges
     Map.ofSeq <| seq {
@@ -98,7 +109,7 @@ testInput |> parse |> edges |> toDot
 
 #!html
 
-<img src="../graph.svg?y" />
+<img src="../25-testInput.svg" />
 
 #!markdown
 
@@ -172,6 +183,77 @@ let tightestLoop ((a,b) as edge) (edges: (string*string) Set) =
 let allEdges = testInput |> parse |> edges
 seq { for edge in allEdges do edge, tightestLoop edge allEdges } |> Seq.sortBy snd |> Seq.iter (printfn "%A")
 
+#!fsharp
+
+let cluster edges =
+  let neighborMap = edges |> Neighbors.fromEdges
+  let findNeighbors depth node =
+    let rec loop depth neighbors =
+      if depth = 0 then neighbors
+      else
+        neighbors |> Set.fold (fun acc n -> neighborMap |> Map.find n |> Set.union acc) Set.empty |> loop (depth - 1)
+    loop depth (Set.singleton node)
+
+  let clusterFuck =
+    let rec loop =
+      function
+      | [_;_] as clusters -> clusters
+      | head::(_::_ as rest) ->
+        let m = rest |> List.map (fun cluster -> cluster, head |> Set.intersect cluster |> Set.count) |> List.groupBy snd |> Map.ofList
+        let mostConnected = m |> Map.maxKeyValue |> snd |> List.map fst |> List.minBy Set.count
+        // union with the most connected, difference from the rest
+        let index = List.findIndex ((=) mostConnected) rest
+        rest |> List.mapi (fun i c -> if i = index then Set.union head c else Set.difference c head ) |> List.sortBy (Set.count) |> loop
+    loop
+
+  let divvy depth a b =
+    // put each node in the cluser where it has the most neighbors
+    let fold (a,b, tied) n =
+      let neighbors = findNeighbors depth n
+      if [a;b] |> List.map (Set.intersect neighbors >> Set.count) |> List.distinct |> List.length |> ((=) 1) then
+        (a,b, n::tied)
+      else
+        [a;b] |> List.sortBy (Set.intersect neighbors >> Set.count)
+        |> function
+          | [a;b] -> (Set.remove n a, Set.add n b, tied)
+    Set.fold fold (a,b, [])
+  
+  neighborMap
+  |> Map.toList |> List.map (fun (k, v) -> Set.add k v )
+  |> clusterFuck
+  |> function
+     | [a;b] ->
+      let a,b, tied = edges |> nodes |> divvy 1 a b
+      let rec loop depth a b tied =
+        if List.isEmpty tied then [a;b]
+        elif depth > 10 then
+          tied |> List.sort |> List.iter (printfn "%A")
+          [a;b]
+        else
+          let tieCount = List.length tied
+          let a,b, tied = tied |> Set.ofList |> divvy depth a b
+          if (List.length tied) = tieCount then
+            loop (depth + 1) a b tied
+          else
+            loop depth a b tied
+      loop 1 a b tied
+
+let bridges a b edges =
+  let neighborMap = Neighbors.fromEdges edges
+  a |> Set.map (fun n -> n, Map.find n neighborMap |> Set.intersect b )
+
+
+testInput |> parse |> edges |> cluster
+
+#!markdown
+
+What if it's not tightest loop, it's like, interconnectedness. the cluster on the left - every node is connected to three other nodes in the cluster. How many steps does it take to get to a new node?
+Or of my neighbors, how many are neighbors? if any of my neighbors are neighbors, they're in my cluster.
+
+#!html
+
+<img src="../25-testInput.svg" />
+
 #!markdown
 
 *boom* ok that looks promising. Let's sketch out a solve.
@@ -218,6 +300,75 @@ let solve1 input =
 
 solve1 testInput
 
+#!markdown
+
+Ok so my clustering attempts failed. Wind up with 166 nodes that have equal connectedness to either side. Cheated - looked up another solution and they mentioned [Karger](https://en.wikipedia.org/wiki/Karger%27s_algorithm). Let's try that.
+
+#!fsharp
+
+module Karger =
+  let randomEdge (edges: 'a seq) =
+    let random = System.Random()
+    let index = random.Next(max (Seq.length edges - 1) 0)
+    edges |> Seq.item index
+
+  let contract ((a,b) as edge) =
+    let contractedNode = sprintf "%s%s" a b
+
+    let choose =
+      function
+      | _, edge' when edge' = edge -> None
+      | i, (x,y) when x = a || x = b -> Some (i, toEdge contractedNode y)
+      | i, (x,y) when y = a || y = b -> Some (i, toEdge x contractedNode)
+      | edge' -> Some edge'
+
+    Seq.choose choose
+
+  let nodeCount (edges: (string * string) seq) = seq { for a,b in edges do a; b } |> Seq.distinct |> Seq.length
+
+  let reduce edges =
+    let rec loop i edges =
+      if i = 2 then edges
+      else edges |> contract (edges |> randomEdge |> snd) |> loop (i - 1)
+
+    let indexed = Seq.indexed edges
+    let cutIndexes = indexed |> loop (nodeCount edges) |> Seq.map fst |> Set.ofSeq
+    indexed |> Seq.filter (fun (i, _) -> Set.contains i cutIndexes) |> Seq.map snd
+
+  let solveUntil n edges =
+    let rec loop edges =
+      let solution = reduce edges
+      let cutCount = Seq.length solution
+      printfn "cut count: %d" cutCount
+      if cutCount = n then solution
+      else loop edges
+    loop edges
+
+//  __
+// |  |\
+// |  |/
+//  --
+
+["A","B"
+ "A","E"
+ "B","D"
+ "B","C"
+ "C","D"
+ "D","E"] |> Seq.indexed |> Karger.contract ("B", "D") |> Karger.contract ("A", "E") |> Karger.contract ("AE", "BD")
+
+#!fsharp
+
+["A","B"
+ "A","E"
+ "B","D"
+ "B","C"
+ "C","D"
+ "D","E"] |> Karger.reduce
+
+#!fsharp
+
+testInput |> parse |> edges |> Karger.solveUntil 3
+
 #!fsharp
 
 let input = Aoc.fetchInput 25
@@ -226,13 +377,20 @@ input |> parse |> edges |> toDot
 
 #!fsharp
 
-solve1 input
+let solve1 input =
+  let edges = input |> parse |> edges
+  
+  edges |> Karger.solveUntil 3
 
 // 1488 too low
+// 426800 too low
+// 437936 wrong answer
+
+solve1 input
 
 #!fsharp
 
-let broken = [
+[
   (("qfj", "tbq"), 9)
   (("xmh", "xqt"), 7)
   (("xgz", "xkg"), 7)
@@ -416,7 +574,9 @@ let broken = [
   (("bcq", "bdp"), 7)
   (("bbz", "mbt"), 7)
   (("bbq", "rmk"), 7)
-  (("bbq", "nzz"), 7)] |> Seq.map fst |> Set.ofSeq |> Set.difference (input |> parse |> edges)
+  (("bbq", "nzz"), 7)] |> Seq.map fst |> Set.ofSeq |> nodes |> Set.intersect (input |> parse |> edges |> nodes)
+
+  
 
 #!fsharp
 
