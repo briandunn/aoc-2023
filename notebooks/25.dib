@@ -322,7 +322,7 @@ module Karger =
       | i, (x,y) when y = a || y = b -> Some (i, toEdge x contractedNode)
       | edge' -> Some edge'
 
-    Seq.choose choose
+    List.choose choose
 
   let nodeCount (edges: (string * string) seq) = seq { for a,b in edges do a; b } |> Seq.distinct |> Seq.length
 
@@ -331,7 +331,7 @@ module Karger =
       if i = 2 then edges
       else edges |> contract (edges |> randomEdge |> snd) |> loop (i - 1)
 
-    let indexed = Seq.indexed edges
+    let indexed = Seq.indexed edges |> List.ofSeq
     let cutIndexes = indexed |> loop (nodeCount edges) |> Seq.map fst |> Set.ofSeq
     indexed |> Seq.filter (fun (i, _) -> Set.contains i cutIndexes) |> Seq.map snd
 
@@ -354,7 +354,7 @@ module Karger =
  "B","D"
  "B","C"
  "C","D"
- "D","E"] |> Seq.indexed |> Karger.contract ("B", "D") |> Karger.contract ("A", "E") |> Karger.contract ("AE", "BD")
+ "D","E"] |> List.indexed |> Karger.contract ("B", "D") |> Karger.contract ("A", "E") |> Karger.contract ("AE", "BD")
 
 #!fsharp
 
@@ -379,8 +379,17 @@ input |> parse |> edges |> toDot
 
 let solve1 input =
   let edges = input |> parse |> edges
-  
-  edges |> Karger.solveUntil 3
+
+  edges
+  |> Karger.solveUntil 3
+  |> Set.ofSeq
+  |> Set.difference edges
+  |> components
+  |> Seq.map (nodes >> Seq.length)
+  |> Seq.reduce (*)
+
+
+
 
 // 1488 too low
 // 426800 too low
