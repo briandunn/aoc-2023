@@ -44,6 +44,20 @@ parse test1
 
 #!fsharp
 
+let print board insides =
+  let (maxX, maxY), _ = Map.maxKeyValue board
+  seq { for y in 0..maxY do
+        yield "\n"
+        for x in 0..maxX do
+           let pt = x,y
+           yield if Set.contains pt insides then "*"
+                 else match Map.tryFind pt board with
+                      | Some c -> string c
+                      | None -> ""
+  } |> String.concat "" |> printfn "%s"
+
+#!fsharp
+
 #!share test2 --from value
 
 let isOdd x = x % 2 = 1
@@ -51,20 +65,17 @@ let isOdd x = x % 2 = 1
 type Side = Top | Bottom | Middle
 
 let countCrossings =
+  // comming from the left...
   let fold (count, side) =
-    (fun x -> x |> printfn "%A"; x)
-    >> function
+    function
     | '|' -> count + 1, Middle
-    | 'F' when side = Bottom -> count + 1, Middle
-    | 'L' when side = Top -> count + 1, Middle
-    | 'J' -> count, Bottom
-    | '7' -> count, Top
+    | '7' when side = Bottom -> count + 1, Middle
+    | 'J' when side = Top -> count + 1, Middle
+    | 'L' -> count, Bottom
+    | 'F' -> count, Top
     | _ -> count, side
-    >> (fun x -> x |> printfn "%A"; x)
 
   List.fold fold (0, Middle) >> fst
-
-".|F--7||||||||FJ." |> List.ofSeq |> countCrossings |> printfn "%A"
 
 // to count crossings we only need to check the current column from start to top or row from start to left
 let isInside (x,y) (map: Map<(int*int), char>) =
@@ -74,8 +85,11 @@ let isInside (x,y) (map: Map<(int*int), char>) =
 
 
 
-// test2 |> parse |> fun board -> board |> Map.keys |> Seq.filter (fun k -> isInside k board)
+test2
+|> parse
+|> fun board -> board |> Map.keys |> Seq.filter (fun k -> isInside k board) |> Set.ofSeq |> print board
 
 #!fsharp
 
 ".|F--7||||||||FJ." |> List.ofSeq |> countCrossings |> printfn "%A"
+"L--J.L7...LJF7F-7L7." |> List.ofSeq |> countCrossings |> printfn "%A"
