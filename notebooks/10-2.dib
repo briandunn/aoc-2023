@@ -1,0 +1,81 @@
+#!meta
+
+{"kernelInfo":{"defaultKernelName":"csharp","items":[{"aliases":[],"name":"csharp"}]}}
+
+#!markdown
+
+# 10.2 - [in or out](https://adventofcode.com/2023/day/10)
+
+#!value
+
+#!value --name test1
+..........
+.S------7.
+.|F----7|.
+.||....||.
+.||....||.
+.|L-7F-J|.
+.|..||..|.
+.L--JL--J.
+..........
+
+#!value
+
+#!value --name test2
+.F----7F7F7F7F-7....
+.|F--7||||||||FJ....
+.||.FJ||||||||L7....
+FJL7L7LJLJ||LJ.L-7..
+L--J.L7...LJS7F-7L7.
+....F-J..F7FJ|L7L7L7
+....L7.F7||L7|.L7L7|
+.....|FJLJ|FJ|F7|.LJ
+....FJL-7.||.||||...
+....L---J.LJ.LJLJ...
+
+#!fsharp
+
+#!share test1 --from value
+let parse (input: string) =
+    Map.ofSeq <| seq { for y, line in Seq.indexed <|input.Split('\n') do
+                       for x, c in Seq.indexed line -> ((x,y), c) }
+
+parse test1
+
+#!fsharp
+
+#!share test2 --from value
+
+let isOdd x = x % 2 = 1
+
+type Side = Top | Bottom | Middle
+
+let countCrossings =
+  let fold (count, side) =
+    (fun x -> x |> printfn "%A"; x)
+    >> function
+    | '|' -> count + 1, Middle
+    | 'F' when side = Bottom -> count + 1, Middle
+    | 'L' when side = Top -> count + 1, Middle
+    | 'J' -> count, Bottom
+    | '7' -> count, Top
+    | _ -> count, side
+    >> (fun x -> x |> printfn "%A"; x)
+
+  List.fold fold (0, Middle) >> fst
+
+".|F--7||||||||FJ." |> List.ofSeq |> countCrossings |> printfn "%A"
+
+// to count crossings we only need to check the current column from start to top or row from start to left
+let isInside (x,y) (map: Map<(int*int), char>) =
+    match Map.tryFind (x,y) map with
+    | Some '.' -> [ for x in 0..x -> Map.tryFind (x,y) map ] |> List.choose id |> countCrossings |> isOdd
+    | _ -> false
+
+
+
+// test2 |> parse |> fun board -> board |> Map.keys |> Seq.filter (fun k -> isInside k board)
+
+#!fsharp
+
+".|F--7||||||||FJ." |> List.ofSeq |> countCrossings |> printfn "%A"
