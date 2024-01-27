@@ -53,7 +53,7 @@ let print board insides =
            yield if Set.contains pt insides then "*"
                  else match Map.tryFind pt board with
                       | Some c -> string c
-                      | None -> ""
+                      | None -> " "
   } |> String.concat "" |> printfn "%s"
 
 #!fsharp
@@ -93,3 +93,100 @@ test2
 
 ".|F--7||||||||FJ." |> List.ofSeq |> countCrossings |> printfn "%A"
 "L--J.L7...LJF7F-7L7." |> List.ofSeq |> countCrossings |> printfn "%A"
+
+#!markdown
+
+I'm happy with that. Now we just need to
+
+1. replace the disconnected pipes with empty space
+1. replace the "S" with a pipe
+
+#!value
+
+#!value --name test3
+
+FF7FSF7F7F7F7F7F---7
+L|LJ||||||||||||F--J
+FL-7LJLJ||||||LJL-77
+F--JF--7||LJLJ7F7FJ-
+L---JF-JLJ.||-FJLJJ7
+|F|F-JF---7F7-L7L|7|
+|FFJF7L7F-JF7|JL---7
+7-L-JL7||F7|L7F-7F7|
+L.L7LFJ|||||FJL7||LJ
+L7JLJL-JLJLJL--JLJ.L
+
+#!fsharp
+
+#!share test3 --from value
+
+type Cardinal = North | South | East | West
+type Point = int * int
+
+type Step = { point: Point; cardinal: Cardinal; tile: char }
+
+let reverseCardinal =
+  function
+  | North -> South
+  | South -> North
+  | East -> West
+  | West -> East
+
+let connectionDirections =
+  function
+  | 'S' -> [North; South; East; West]
+  | 'L' -> [North; East]
+  | 'F' -> [South; East]
+  | '7' -> [South; West]
+  | 'J' -> [North; West]
+  | '|' -> [North; South]
+  | '-' -> [East; West]
+  | _ -> []
+  >> Set.ofList
+
+let neighborPt (x,y) =
+  function
+  | North -> x, y - 1
+  | South -> x, y + 1
+  | East -> x + 1, y
+  | West -> x - 1, y
+
+let next ({point = pt; cardinal = from; tile = tile} as step) map : Step option =
+  let bindTile nPt exitDirection nTile =
+    if nTile |> connectionDirections |> Set.contains (reverseCardinal exitDirection) then
+      Some { point = nPt; cardinal = exitDirection; tile = nTile }
+    else
+      None
+
+  let bindExitDirection exitDirection =
+    let pt = (neighborPt pt exitDirection)
+    map |> Map.tryFind pt |> Option.bind (bindTile pt exitDirection)
+
+  tile
+  |> connectionDirections
+  |> Set.remove (reverseCardinal from)
+  |> Seq.tryExactlyOne
+  |> Option.bind bindExitDirection
+
+
+let findLoop map =
+  let rec loop found step =
+    match next step map with
+    | Some nextStep when not (Set.contains step.point found) -> loop (Set.add step.point found) nextStep
+    | _ -> found
+
+
+  let mapStart tile pt =
+    let mapDirection cardinal =
+      let pt = neighborPt pt cardinal
+      Map.tryFind pt map |> Option.map (fun tile -> { point = pt; cardinal = cardinal; tile = tile })
+
+    tile |> connectionDirections |> Seq.choose mapDirection |> Seq.map (loop Set.empty) |> Set.unionMany
+
+  map |> Map.tryFindKey (fun k v -> v = 'S') |> Option.map (mapStart 'S') |> Option.defaultValue Set.empty
+
+test3
+|> parse
+|> fun map -> print (map |> findLoop |> Seq.fold (fun acc pt -> Map.add pt (Map.find pt map) acc) Map.empty) Set.empty
+
+test3 |> parse |> findLoop |> printfn "%A"
