@@ -45,7 +45,10 @@ parse test1
 #!fsharp
 
 let print board insides =
-  let (maxX, maxY), _ = Map.maxKeyValue board
+  let keys = Map.keys board
+
+  let maxY = keys |> Seq.map snd |> Seq.max
+  let maxX = keys |> Seq.map fst |> Seq.max
   seq { for y in 0..maxY do
         yield "\n"
         for x in 0..maxX do
@@ -66,22 +69,23 @@ type Side = Top | Bottom | Middle
 
 let countCrossings =
   // comming from the left...
-  let fold (count, side) =
-    function
-    | '|' -> count + 1, Middle
-    | '7' when side = Bottom -> count + 1, Middle
-    | 'J' when side = Top -> count + 1, Middle
-    | 'L' -> count, Bottom
-    | 'F' -> count, Top
+  let fold (count, side) tile =
+    match tile, side with
+    | '7', Bottom | 'J', Top | '|', _ -> count + 1, Middle
+    | 'L', _ -> count, Bottom
+    | 'F', _ -> count, Top
     | _ -> count, side
 
   List.fold fold (0, Middle) >> fst
 
 // to count crossings we only need to check the current column from start to top or row from start to left
-let isInside (x,y) (map: Map<(int*int), char>) =
-    match Map.tryFind (x,y) map with
-    | Some '.' -> [ for x in 0..x -> Map.tryFind (x,y) map ] |> List.choose id |> countCrossings |> isOdd
-    | _ -> false
+let isInside (x,y) map =
+  let row = [ for x in 0..x -> Map.tryFind (x,y) map ] |> List.choose id
+  let crossings = countCrossings row
+  if isOdd crossings then
+    printfn "%d,%d\t%d\t%s" x y crossings (row |> List.map string |> String.concat "")
+    true
+  else false
 
 
 
@@ -168,25 +172,67 @@ let next ({point = pt; cardinal = from; tile = tile} as step) map : Step option 
   |> Seq.tryExactlyOne
   |> Option.bind bindExitDirection
 
+let startTile tile pt loop map = 
+    let startConnections =
+      let inLoop cardinal = Set.contains (neighborPt pt cardinal) loop
+      let connectsFrom cardinal =
+        let pt = neighborPt pt cardinal
+        map |> Map.tryFind pt |> Option.map (connectionDirections >> Set.contains (reverseCardinal cardinal)) |> Option.defaultValue false
+      tile |> connectionDirections |> Set.filter inLoop |> Set.filter connectsFrom
 
-let findLoop map =
+    "LF7J|-" |> Seq.tryFind (connectionDirections >> ((=) startConnections))
+
+let findLoop startTile startPt map =
   let rec loop found step =
     match next step map with
     | Some nextStep when not (Set.contains step.point found) -> loop (Set.add step.point found) nextStep
     | _ -> found
 
+  let mapDirection cardinal =
+    let pt = neighborPt startPt cardinal
+    Map.tryFind pt map |> Option.map (fun tile -> { point = pt; cardinal = cardinal; tile = tile })
 
-  let mapStart tile pt =
-    let mapDirection cardinal =
-      let pt = neighborPt pt cardinal
-      Map.tryFind pt map |> Option.map (fun tile -> { point = pt; cardinal = cardinal; tile = tile })
+  startTile |> connectionDirections |> Seq.choose mapDirection |> Seq.map (loop Set.empty) |> Seq.maxBy (Set.count)
 
-    tile |> connectionDirections |> Seq.choose mapDirection |> Seq.map (loop Set.empty) |> Set.unionMany
+let cleanMap map =
+  let mapStart tile pt = 
+    let loop = findLoop tile pt map
+    let map = map |> startTile tile pt loop |> Option.map (fun start -> Map.add pt start map) |> Option.defaultValue map
+    Seq.fold (fun acc pt -> Map.add pt (Map.find pt map) acc) Map.empty loop
 
-  map |> Map.tryFindKey (fun k v -> v = 'S') |> Option.map (mapStart 'S') |> Option.defaultValue Set.empty
+  map |> Map.tryFindKey (fun k v -> v = 'S') |> Option.map (mapStart 'S') |> Option.defaultValue Map.empty
 
-test3
-|> parse
-|> fun map -> print (map |> findLoop |> Seq.fold (fun acc pt -> Map.add pt (Map.find pt map) acc) Map.empty) Set.empty
+print (test3 |> parse |> cleanMap) Set.empty
 
-test3 |> parse |> findLoop |> printfn "%A"
+#!fsharp
+
+#load "Aoc.fsx"
+
+let input = Aoc.fetchInput 10
+
+#!fsharp
+
+#!share test3 --from value
+#!share test2 --from value
+
+let solve map = 
+  // printfn "maxY: %A" (map |> Map.keys |> Seq.map snd |> Seq.max)
+  let cleaned = cleanMap map
+  let isInside pt = isInside pt cleaned
+  // printfn "maxY: %A" (cleaned |> Map.keys |> Seq.map snd |> Seq.max)
+  print cleaned Set.empty
+  let pointsNotInLoop = cleaned |> Map.keys |> Set.ofSeq |> Set.difference (map |> Map.keys |> Set.ofSeq)
+  let inside = pointsNotInLoop |> Set.filter isInside
+  print cleaned inside
+  Set.count inside
+
+
+input |> parse |> solve
+
+// test2 |> parse |> solve
+
+// 416 too high
+// 406 too low
+// 407 too low
+
+// why is it 415?
