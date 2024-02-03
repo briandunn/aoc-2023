@@ -1,0 +1,118 @@
+#!meta
+
+{"kernelInfo":{"defaultKernelName":"csharp","items":[{"aliases":[],"name":"csharp"}]}}
+
+#!markdown
+
+# 14.2 - Spin Cycle
+
+#!value
+
+#!value --name test
+
+O....#....
+O.OO#....#
+.....##...
+OO.#O....O
+.O.....O#.
+O.#..O.#.#
+..O..#O..O
+.......O..
+#....###..
+#OO..#....
+
+#!fsharp
+
+type Tile = Ball | Cube
+type Pt = int*int
+type Board = {tiles: Map<Pt, Tile>; width: int; height: int}
+
+let parse (input: string) : Board =
+  let lines = input.Split('\n')
+  let width = lines |> Seq.tryHead |> Option.map Seq.length |> Option.defaultValue 0
+  let height = Seq.length lines
+  let tiles = seq {
+    for y,line in Seq.indexed <| input.Split('\n') do
+        for x,c in Seq.indexed line do
+          match c with
+          | 'O' -> yield (x,y), Ball
+          | '#' -> yield (x,y), Cube
+          | _ -> ()
+  }
+
+  {tiles = Map.ofSeq tiles; width = input.IndexOf('\n'); height = input.Split('\n').Length}
+
+#!fsharp
+
+#!share test --from value
+
+parse test
+
+#!fsharp
+
+type Cardinal = N | E | S | W
+
+let slice groupBy sortBy =
+  Map.toSeq
+  >> Seq.groupBy (fst >> groupBy)
+  >> Seq.map (fun (i, tiles) -> i, tiles |> Seq.map (fun (pt, t) -> sortBy pt,t) |> Seq.sortBy fst)
+
+let columns : Map<Pt,Tile> -> (int* ((int*Tile) seq)) seq = slice fst snd
+let rows : Map<Pt,Tile> -> (int* ((int*Tile) seq)) seq = slice snd fst
+
+let slide: (int*Tile) seq -> (int*Tile) seq =
+  let rec slide height slid =
+    function
+    | (i, Ball)::rest -> slide (height + 1) ((height, Ball)::slid) rest
+    | (i, Cube)::rest -> slide (i + 1) ((i, Cube)::slid) rest
+    | [] -> slid |> List.rev |> Seq.ofList
+  Seq.toList >> slide 0 []
+
+let invert max (i,line) =
+  let map (j, t) = (max - j, t)
+  (i, line |> Seq.map map)
+
+
+let tilt cardinal board =
+  let tilt tiles = 
+    let lines, convert = match cardinal with
+                         | N -> (columns tiles), id
+                         | W -> (rows tiles), fun ((x,y),t) -> ((y,x), t)
+                         | S -> (tiles |> columns |> Seq.map (invert board.height)), fun ((x,y),t) -> ((x, board.height - y), t)
+                        //  | E -> (rows tiles), fun ((x,y),t) -> ((y,x), t)
+
+    seq { for i,line in lines do for j, tile in slide line -> convert <| ((i, j), tile) } |> Map.ofSeq
+
+
+  { board with tiles = tilt board.tiles }
+
+#!fsharp
+
+((slide [1,Ball; 3,Cube; 6,Ball]) = [0,Ball; 3,Cube; 4, Ball])
+slide [1,Ball; 3,Cube; 6,Ball]
+
+#!fsharp
+
+#!share test --from value
+
+test |> parse |> (fun b -> b.tiles) |> rows
+
+#!fsharp
+
+let print {height = height; width = width; tiles = tiles} = 
+  seq { for y in 0..height-1 do
+        yield '\n'
+        for x in 0..width-1 do
+        match Map.tryFind (x,y) tiles with
+        | Some Ball -> yield 'O'
+        | Some Cube -> yield '#'
+        | None -> yield '.'
+  } |> Seq.map string |> String.concat "" |> printfn "%s"
+
+#!fsharp
+
+#!share test --from value
+
+test |> parse |> tilt N |> print
+test |> parse |> tilt W |> print
+test |> parse |> tilt S |> print
