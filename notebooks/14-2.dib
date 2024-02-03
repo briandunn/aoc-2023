@@ -68,20 +68,22 @@ let slide: (int*Tile) seq -> (int*Tile) seq =
     | [] -> slid |> List.rev |> Seq.ofList
   Seq.toList >> slide 0 []
 
-let invert max (i,line) =
-  let map (j, t) = (max - j, t)
-  (i, line |> Seq.map map)
-
+let invert length =
+  let mapTile (j, t) = length - j - 1, t
+  let mapLine (i, line) = i, line |> Seq.map mapTile |> Seq.rev
+  Seq.map mapLine 
 
 let tilt cardinal board =
   let tilt tiles = 
     let lines, convert = match cardinal with
                          | N -> (columns tiles), id
                          | W -> (rows tiles), fun ((x,y),t) -> ((y,x), t)
-                         | S -> (tiles |> columns |> Seq.map (invert board.height)), fun ((x,y),t) -> ((x, board.height - y), t)
-                        //  | E -> (rows tiles), fun ((x,y),t) -> ((y,x), t)
-
-    seq { for i,line in lines do for j, tile in slide line -> convert <| ((i, j), tile) } |> Map.ofSeq
+                         | S -> (tiles |> columns |> invert board.height), fun ((x,y),t) -> ((x, board.height - y - 1), t)
+                         | E -> (tiles |> rows |> invert board.width), fun ((x,y),t) -> ((board.width - y - 1, x), t)
+    seq { for i,line in lines do
+          for j, tile in slide line do
+            yield convert <| ((i, j), tile)
+    } |> Map.ofSeq
 
 
   { board with tiles = tilt board.tiles }
@@ -90,6 +92,8 @@ let tilt cardinal board =
 
 ((slide [1,Ball; 3,Cube; 6,Ball]) = [0,Ball; 3,Cube; 4, Ball])
 slide [1,Ball; 3,Cube; 6,Ball]
+
+[(0, [(9, Ball);(8, Ball);(6, Ball);(4, Ball);(1, Cube);(0, Cube)])] |> Seq.iter (snd >> Seq.rev >> slide >> Seq.iter (printfn "%A"))
 
 #!fsharp
 
@@ -113,6 +117,6 @@ let print {height = height; width = width; tiles = tiles} =
 
 #!share test --from value
 
-test |> parse |> tilt N |> print
+// test |> parse |> tilt N |> print
 test |> parse |> tilt W |> print
-test |> parse |> tilt S |> print
+test |> parse |> tilt E |> print
