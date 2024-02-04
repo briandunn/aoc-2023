@@ -127,12 +127,19 @@ let cycle board =
    [N;W;S;E] |> List.fold (fun board cardinal -> tilt cardinal board) board
 
 let findLoop =
-  let rec loop prevCount prev board =
-    let next = Set.add board prev
-    let count = Set.count next
-    if prevCount = count then prev, board
-    else board |> cycle |> loop count next
-  loop 0 Set.empty
+  let change =
+    function
+    | Some Ball -> Some Cube
+    | Some Cube -> Some Ball
+    | _ -> None
+  let rec loop i prev board =
+    prev
+    |> Map.tryFind board.tiles
+    |> function
+       | Some _ -> prev, board
+       | None -> 
+         loop (i + 1) (Map.add (board.tiles) i prev) (cycle board)
+  loop 0 Map.empty
 
 let solve =
   let unfold board =
@@ -151,16 +158,16 @@ let input = Aoc.fetchInput 14
 
 #!share test --from value
 
-test |> parse |> cycle |> print
+// test |> parse |> cycle |> print
 // input |> solve |> Seq.map Set.count |> Seq.take 4 // first loop is 124, subsequent are 22
-test |> solve |> Seq.map Set.count |> Seq.take 4 // first loop is 10, subsequent are 7
+test |> solve |> Seq.take 2 // first loop is 10, subsequent are 7
 
 
-let fewestCycles initial loopSize target =
-  initial + (target - initial) % loopSize
+// let fewestCycles initial loopSize target =
+//   initial + (target - initial) % loopSize
 
 
-fewestCycles 10 7 1000000000
+// fewestCycles 10 7 1000000000
 
 #!fsharp
 
