@@ -28,11 +28,11 @@ type Pt = int*int
 type Board = {tiles: Map<Pt, Tile>; width: int; height: int}
 
 let parse (input: string) : Board =
-  let lines = input.Split('\n')
+  let lines = input.TrimEnd('\n').Split('\n')
   let width = lines |> Seq.tryHead |> Option.map Seq.length |> Option.defaultValue 0
   let height = Seq.length lines
   let tiles = seq {
-    for y,line in Seq.indexed <| input.Split('\n') do
+    for y,line in Seq.indexed lines do
         for x,c in Seq.indexed line do
           match c with
           | 'O' -> yield (x,y), Ball
@@ -40,7 +40,7 @@ let parse (input: string) : Board =
           | _ -> ()
   }
 
-  {tiles = Map.ofSeq tiles; width = input.IndexOf('\n'); height = input.Split('\n').Length}
+  {tiles = Map.ofSeq tiles; width = width; height = height}
 
 #!fsharp
 
@@ -73,13 +73,16 @@ let invert length =
   let mapLine (i, line) = i, line |> Seq.map mapTile |> Seq.rev
   Seq.map mapLine 
 
+let rotate ((x,y),t) = ((y,x), t)
+let revert max ((x,y),t) = ((x, max - y - 1), t)
+
 let tilt cardinal board =
   let tilt tiles = 
     let lines, convert = match cardinal with
                          | N -> (columns tiles), id
-                         | W -> (rows tiles), fun ((x,y),t) -> ((y,x), t)
-                         | S -> (tiles |> columns |> invert board.height), fun ((x,y),t) -> ((x, board.height - y - 1), t)
-                         | E -> (tiles |> rows |> invert board.width), fun ((x,y),t) -> ((board.width - y - 1, x), t)
+                         | W -> (rows tiles), rotate
+                         | S -> (tiles |> columns |> invert board.height), revert board.height
+                         | E -> (tiles |> rows |> invert board.width), revert board.width >> rotate
     seq { for i,line in lines do
           for j, tile in slide line do
             yield convert <| ((i, j), tile)
@@ -104,7 +107,7 @@ test |> parse |> (fun b -> b.tiles) |> rows
 #!fsharp
 
 let print {height = height; width = width; tiles = tiles} = 
-  seq { for y in 0..height-1 do
+  seq { for y in 0..height-2 do
         yield '\n'
         for x in 0..width-1 do
         match Map.tryFind (x,y) tiles with
@@ -134,19 +137,47 @@ let findLoop =
     | _ -> None
   let rec loop i prev board =
     prev
-    |> Map.tryFind board.tiles
+    |> Map.tryFind board
     |> function
        | Some _ -> prev, board
        | None -> 
-         loop (i + 1) (Map.add (board.tiles) i prev) (cycle board)
+         loop (i + 1) (Map.add board i prev) (cycle board)
   loop 0 Map.empty
 
-let solve =
+let loops =
   let unfold board =
     let loop, board = findLoop board
     Some (loop, board)
 
-  parse >> Seq.unfold unfold
+  Seq.unfold unfold
+
+#!value
+
+#!value --name loadTest
+
+OOOO.#.O..
+OO..#....#
+OO..O##..O
+O..#.OO...
+........#.
+..#....#.#
+..O..#.O.O
+..O.......
+#....###..
+#....#....
+
+#!fsharp
+
+#!share loadTest --from value
+
+let load {height = height; tiles = tiles} = 
+  let fold sum (_,y) = 
+    function
+    | Ball -> sum + (height - y)
+    | Cube -> sum
+  tiles |> Map.fold fold 0
+
+loadTest |> parse |> load
 
 #!fsharp
 
@@ -158,26 +189,23 @@ let input = Aoc.fetchInput 14
 
 #!share test --from value
 
-// test |> parse |> cycle |> print
-// input |> solve |> Seq.map Set.count |> Seq.take 4 // first loop is 124, subsequent are 22
-test |> solve |> Seq.take 2 // first loop is 10, subsequent are 7
+let fewestCycles initial loopSize target =
+  (target - initial) % loopSize
+
+let solve n input = 
+  let board = parse input
+
+  board
+  |> loops
+  |> Seq.take 2
+  |> Seq.toList
+  |> function
+     | [initial; firstLoop] ->
+        let i = fewestCycles (Map.count initial) (Map.count firstLoop) n
+        firstLoop
+        |> Map.tryFindKey (fun _ index -> index = i)
+        |> Option.map load
+     | _ -> None
 
 
-// let fewestCycles initial loopSize target =
-//   initial + (target - initial) % loopSize
-
-
-// fewestCycles 10 7 1000000000
-
-#!fsharp
-
-#!share test --from value
-
-let load {tiles = tiles} = 
-  let fold sum (_,y) = 
-    function
-    | Ball -> sum + y
-    | Cube -> sum
-  tiles |> Map.fold fold 0
-
-test |> parse |> load
+solve 1_000_000_000 input
