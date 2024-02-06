@@ -137,7 +137,7 @@ let rectangles = Rectangle.fromSegments
 let solve instructions =
   let segments = segments instructions
   let rectangles = rectangles segments
-  let insideRects, outsideRects = List.partition (fun r -> isInside r segments) rectangles
+  let insideRects, _outsideRects = List.partition (fun r -> isInside r segments) rectangles
   let perimiter = seq {for {instruction = {distance = distance}} in segments -> int64 distance } |> Seq.sum
   let inside = insideRects |> Seq.map Rectangle.area |> Seq.sum
   perimiter + inside
