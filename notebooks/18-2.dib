@@ -1,0 +1,192 @@
+#!meta
+
+{"kernelInfo":{"defaultKernelName":"csharp","items":[{"aliases":[],"name":"csharp"}]}}
+
+#!markdown
+
+# 18.2 - big hole
+
+#!value
+
+#!value --name test
+
+R 6 (#70c710)
+D 5 (#0dc571)
+L 2 (#5713f0)
+D 2 (#d2c081)
+R 2 (#59c680)
+D 2 (#411b91)
+L 5 (#8ceee2)
+U 2 (#caa173)
+L 1 (#1b58a2)
+U 2 (#caa171)
+R 2 (#7807d2)
+U 3 (#a77fa3)
+L 2 (#015232)
+U 2 (#7a21e3)
+
+#!fsharp
+
+type Direction = | Up | Down | Left | Right
+type Instruction = {distance: int; direction: Direction}
+let parse (input: string) =
+  let parseDistance (input: string) = Some <| System.Convert.ToInt32(input, 16)
+  let parseDirection =
+    function
+    | "0" -> Some Right 
+    | "1" -> Some Down
+    | "2" -> Some Left
+    | "3" -> Some Up
+    | _ -> None
+
+  let hex = new RegularExpressions.Regex("\(#([a-f0-9]{5})([0-3])\)$")
+  let toInstruction distance direction = {distance = distance; direction = direction}
+  seq { for line in input.Split('\n') do
+         hex.Match(line).Groups
+         |> Seq.toList
+         |> function
+            | [_; distance; direction] ->
+              Option.map2 toInstruction (parseDistance distance.Value) (parseDirection direction.Value)
+            | _ -> None
+  } |> Seq.choose id
+
+#!fsharp
+
+#!share test --from value
+
+parse test
+
+#!fsharp
+
+type Segment = {start: Pt; instruction: Instruction}
+module Segment =
+  let start segment = segment.start
+
+  let stop {start = (x,y); instruction = {distance = distance; direction = direction}} =
+    match direction with
+    | Up -> (x, y - distance)
+    | Down -> (x, y + distance)
+    | Left -> (x - distance, y)
+    | Right -> (x + distance, y)
+
+  let contains pt ({start = start} as segment) =
+    match pt, start, stop segment with
+    | (x,y), (x1,y1), (x2,y2) when x1 = x2 && x = x1 -> (y1 <= y && y <= y2) || (y2 <= y && y <= y1)
+    | (x,y), (x1,y1), (x2,y2) when y1 = y2 && y = y1 -> (x1 <= x && x <= x2) || (x2 <= x && x <= x1)
+    | _ -> false
+
+  let fromInstructions : Instruction seq -> Segment list =
+    let fold (segments, ((x,y) as start)) ({distance = distance; direction = direction} as instruction) =
+      let segment = {start=start; instruction = instruction}
+      (segment::segments, stop segment)
+
+    Seq.fold fold ([],(0,0)) >> fst
+
+#!fsharp
+
+type Pt = int*int
+type Rectangle = {corner: Pt; width: int; height: int}
+module Rectangle = 
+  let center ({corner = (x,y); width = width; height = height}) = (x + width / 2, y + height / 2)
+
+  let area {width = w; height = h} = (int64 w) * (int64 h)
+
+  let isBoarder pt1 pt2 segments = segments |> Seq.exists (fun segment -> Segment.contains pt1 segment && Segment.contains pt2 segment)
+
+  let fromSegments segments =
+    let fold (xs,ys) { start = (x,y)} = (x::xs, y::ys)
+    let xs, ys = Seq.fold fold ([],[]) segments
+    let distinctOrderedPairs = List.sort >> List.distinct >> List.pairwise
+    [for x1,x2 in distinctOrderedPairs xs do
+      for y1,y2 in distinctOrderedPairs ys do
+        // printfn "topBoarder:%A" <| isBoarder (x1,y1) (x2,y1) segments
+        // printfn "leftBoarder:%A" <| isBoarder (x1,y1) (x1,y2) segments
+        // printfn "bottomBorder:%A" <| isBoarder (x1,y2) (x2,y2) segments
+        // printfn "rightBorder:%A" <| isBoarder (x2,y1) (x2,y2) segments
+        let y = if isBoarder (x1,y1) (x2,y1) segments then y1 + 1 else y1
+        let x = if isBoarder (x1,y1) (x1,y2) segments then x1 + 1 else x1
+        {corner = x, y; width = x2 - x; height = y2 - y}
+    ]
+
+#!fsharp
+
+type Side = Top | Middle | Bottom
+
+let crosses (x,y) (count, side) ({start = start} as segment) =
+  match start,Segment.stop segment with
+  | ((x1, y1),(x2, y2)) when x1 = x2 && y1 = y && y2 > y || y2 = y && y1 > y -> if side = Bottom then (count + 1, Middle) else (count, Top)
+  | ((x1, y1),(x2, y2)) when x1 = x2 && y1 = y && y2 < y || y2 = y && y1 < y -> if side = Top then (count + 1, Middle) else (count, Bottom)
+  | ((x1, y1),(x2, y2)) when x1 = x2 && y1 < y && y2 > y || y2 < y && y1 > y -> (count + 1, Middle)
+  | _ -> count, side
+  
+
+let isOdd n = n % 2 = 1
+let segments : Instruction seq -> Segment list = Segment.fromInstructions
+
+let isInside rect segments =
+  let pt = Rectangle.center rect
+  let segments = segments |> Seq.sortBy (Segment.start >> fst) |> Seq.takeWhile (Segment.start >> fst >> ((>) (fst pt)))
+
+  segments |> Seq.fold (crosses pt) (0,Middle) |> fst |> isOdd
+
+let rectangles = Rectangle.fromSegments
+
+#!fsharp
+
+let print segments = 
+  let min = [for {instruction={distance=distance}} in segments -> distance] |> List.min
+  let (vertical, horizontal) = segments |> List.partition (function {instruction={direction = direction}} when direction = Up || direction = Down -> true | _ -> false)
+  min
+
+#!fsharp
+
+#!share test --from value
+
+let solve instructions =
+  let segments = segments instructions
+  let rectangles = rectangles segments
+  let insideRects, outsideRects = List.partition (fun r -> isInside r segments) rectangles
+  Seq.iter (printfn " inside: %A") insideRects
+  Seq.iter (printfn "outside: %A") outsideRects
+  let perimiter = seq {for {instruction = {distance = distance}} in segments -> int64 distance } |> Seq.sum
+  printfn "perimiter: %d" perimiter
+  let inside = insideRects |> Seq.map Rectangle.area |> Seq.sum
+  printfn "inside: %d" inside
+  perimiter + inside
+
+
+// 952408144115
+// 952403076475
+
+[
+  {direction = Down; distance = 9}
+  {direction = Right; distance = 9}
+  {direction = Up; distance = 9}
+  {direction = Left; distance = 9}
+] |> solve
+
+let parse1 (input: string) =
+  let parseDir = function
+                 | "R" -> Right            
+                 | "L" -> Left                                    
+                 | "U" -> Up                                      
+                 | "D" -> Down                                    
+  seq { for line in input.Split('\n') do
+          line.Split(' ')
+          |> Array.take 2
+          |> function
+             |[|dir; dist|] -> { direction = parseDir dir; distance = System.Convert.ToInt32(dist) }
+  }
+
+test |> parse |> solve
+
+#!fsharp
+
+[
+  {direction = Down; distance = 4}
+  {direction = Right; distance = 4}
+  {direction = Down; distance = 4}
+  {direction = Right; distance = 4}
+  {direction = Up; distance = 8}
+  {direction = Left; distance = 8}
+] |> solve
