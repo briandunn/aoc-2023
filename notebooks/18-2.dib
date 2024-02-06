@@ -58,6 +58,7 @@ parse test
 
 #!fsharp
 
+type Pt = int*int
 type Segment = {start: Pt; instruction: Instruction}
 module Segment =
   let start segment = segment.start
@@ -84,12 +85,11 @@ module Segment =
 
 #!fsharp
 
-type Pt = int*int
-type Rectangle = {corner: Pt; width: int; height: int}
+type Rectangle = {corner: Pt; width: int; height: int; missingCorner: bool}
 module Rectangle = 
   let center ({corner = (x,y); width = width; height = height}) = (x + width / 2, y + height / 2)
 
-  let area {width = w; height = h} = (int64 w) * (int64 h)
+  let area {width = w; height = h; missingCorner = corner} = (int64 w) * (int64 h) - (if corner then 1L else 0L)
 
   let isBoarder pt1 pt2 segments = segments |> Seq.exists (fun segment -> Segment.contains pt1 segment && Segment.contains pt2 segment)
 
@@ -99,13 +99,13 @@ module Rectangle =
     let distinctOrderedPairs = List.sort >> List.distinct >> List.pairwise
     [for x1,x2 in distinctOrderedPairs xs do
       for y1,y2 in distinctOrderedPairs ys do
-        // printfn "topBoarder:%A" <| isBoarder (x1,y1) (x2,y1) segments
-        // printfn "leftBoarder:%A" <| isBoarder (x1,y1) (x1,y2) segments
-        // printfn "bottomBorder:%A" <| isBoarder (x1,y2) (x2,y2) segments
-        // printfn "rightBorder:%A" <| isBoarder (x2,y1) (x2,y2) segments
-        let y = if isBoarder (x1,y1) (x2,y1) segments then y1 + 1 else y1
-        let x = if isBoarder (x1,y1) (x1,y2) segments then x1 + 1 else x1
-        {corner = x, y; width = x2 - x; height = y2 - y}
+        // sometimes they may have a missing top right corner
+        let boarderedTop = isBoarder (x1,y1) (x2,y1) segments
+        let boarderedLeft = isBoarder (x1,y1) (x1,y2) segments
+        let y = if boarderedTop then y1 + 1 else y1
+        let x = if boarderedLeft then x1 + 1 else x1
+        let missingCorner = not boarderedTop && not boarderedLeft && Seq.exists (Segment.start >> ((=) (x1,y1))) segments
+        {corner = x, y; width = x2 - x; height = y2 - y; missingCorner = missingCorner}
     ]
 
 #!fsharp
@@ -118,7 +118,6 @@ let crosses (x,y) (count, side) ({start = start} as segment) =
   | ((x1, y1),(x2, y2)) when x1 = x2 && y1 = y && y2 < y || y2 = y && y1 < y -> if side = Top then (count + 1, Middle) else (count, Bottom)
   | ((x1, y1),(x2, y2)) when x1 = x2 && y1 < y && y2 > y || y2 < y && y1 > y -> (count + 1, Middle)
   | _ -> count, side
-  
 
 let isOdd n = n % 2 = 1
 let segments : Instruction seq -> Segment list = Segment.fromInstructions
@@ -133,37 +132,15 @@ let rectangles = Rectangle.fromSegments
 
 #!fsharp
 
-let print segments = 
-  let min = [for {instruction={distance=distance}} in segments -> distance] |> List.min
-  let (vertical, horizontal) = segments |> List.partition (function {instruction={direction = direction}} when direction = Up || direction = Down -> true | _ -> false)
-  min
-
-#!fsharp
-
 #!share test --from value
 
 let solve instructions =
   let segments = segments instructions
   let rectangles = rectangles segments
   let insideRects, outsideRects = List.partition (fun r -> isInside r segments) rectangles
-  Seq.iter (printfn " inside: %A") insideRects
-  Seq.iter (printfn "outside: %A") outsideRects
   let perimiter = seq {for {instruction = {distance = distance}} in segments -> int64 distance } |> Seq.sum
-  printfn "perimiter: %d" perimiter
   let inside = insideRects |> Seq.map Rectangle.area |> Seq.sum
-  printfn "inside: %d" inside
   perimiter + inside
-
-
-// 952408144115
-// 952403076475
-
-[
-  {direction = Down; distance = 9}
-  {direction = Right; distance = 9}
-  {direction = Up; distance = 9}
-  {direction = Left; distance = 9}
-] |> solve
 
 let parse1 (input: string) =
   let parseDir = function
@@ -178,7 +155,7 @@ let parse1 (input: string) =
              |[|dir; dist|] -> { direction = parseDir dir; distance = System.Convert.ToInt32(dist) }
   }
 
-test |> parse |> solve
+test |> parse1 |> solve
 
 #!fsharp
 
@@ -190,3 +167,15 @@ test |> parse |> solve
   {direction = Up; distance = 8}
   {direction = Left; distance = 8}
 ] |> solve
+
+#!fsharp
+
+#load "Aoc.fsx"
+
+let input = Aoc.fetchInput 18
+
+#!fsharp
+
+input |> parse |> solve
+
+// 47452118468651 <- too high
