@@ -93,13 +93,12 @@ ex, total space is 12. permutations to filter would be
 let distributions groups total =
    let rec loop total =
       function
-      | 0 -> [[]]
       | 1 -> [[total]]
-      | groups -> List.concat [for i in 0..total -> loop (total - i) (groups - 1) |> List.map (fun x -> i::x)]
+      | groups -> [for i in 0..total do for dist in loop (total - i) (groups - 1) -> i::dist]
 
    loop total groups
 
-distributions 9 4 |> List.length
+distributions 5 2
 
 #!fsharp
 
@@ -164,7 +163,7 @@ let permute ({ statuses = statuses; damagedGroupLengths = damagedGroupLengths } 
     let totalOperational = totalLength - (Seq.sum damagedGroupLengths) - (damagedGroupCount - 1)
     let gapCount = damagedGroupCount + 1
     printfn "%A" (gapCount, totalOperational)
-    distributions totalOperational gapCount |> List.length
+    // distributions totalOperational gapCount |> List.length
 
 // let solve = parse >> Seq.map (permute >> Seq.filter satisfies >> Seq.length) >> Seq.sum
 
