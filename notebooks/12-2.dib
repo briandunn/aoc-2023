@@ -90,15 +90,25 @@ ex, total space is 12. permutations to filter would be
 
 #!fsharp
 
+let rec distribute groups total =                      
+   match groups with
+   | 1 -> [[total]]                             
+   | groups -> [for i in 0..total do for dist in distribute (groups - 1) (total - i) -> i::dist]      
+
 let distributions groups total =
-   let rec loop total =
+   let rec loop acc =
       function
-      | 1 -> [[total]]
-      | groups -> [for i in 0..total do for dist in loop (total - i) (groups - 1) -> i::dist]
+      | (head,total,groups)::rest ->
+         match groups with
+         | 1 -> loop ((total::head)::acc) rest
+         | groups -> loop acc ([for i in 0..total do i::head, total - i, groups - 1] @ rest)
+      | [] -> acc
 
-   loop total groups
+   loop [] [[],total,groups]
 
-distributions 5 2
+[for (groups, total) in [3,3] do
+  yield distributions groups total
+  yield distribute groups total ] |> List.iter (List.sort >> printfn "%A")
 
 #!fsharp
 
