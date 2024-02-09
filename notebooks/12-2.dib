@@ -95,7 +95,7 @@ let rec distribute groups total =
    | 1 -> [[total]]                             
    | groups -> [for i in 0..total do for dist in distribute (groups - 1) (total - i) -> i::dist]      
 
-let distributions groups total =
+let distributions' groups total =
    let rec loop acc =
       function
       | (head,total,groups)::rest ->
@@ -106,9 +106,37 @@ let distributions groups total =
 
    loop [] [[],total,groups]
 
-[for (groups, total) in [3,3] do
-  yield distributions groups total
-  yield distribute groups total ] |> List.iter (List.sort >> printfn "%A")
+let distributions groups total =
+   let unfold =
+      let rec loop =
+         function
+         | (head,total,groups)::rest ->
+            match groups with
+            | 1 -> Some ((total::head), rest)
+            | groups -> loop ([for i in 0..total do i::head, total - i, groups - 1] @ rest)
+         | [] -> None
+      loop
+
+   Seq.unfold unfold [[],total,groups]
+
+// [for (groups, total) in [3,3] do
+//   yield distributions groups total
+//   yield distribute groups total ] |> List.iter (List.sort >> printfn "%A")
+
+distributions 16 35 |> Seq.take 100_000_000 |> Seq.length
+
+#!markdown
+
+Ok thats way too many permutations even once we get the function to be fast.
+
+What if we go incrementally
+
+find the index ranges for each run
+take from the statuses until we hit the upper end of the range of the first run
+permute unknowns in that range and filter for that run
+do for all runs
+now we know the index in each of where the run occurs
+so for all the runs we can count the combinations where they fit together.
 
 #!fsharp
 
