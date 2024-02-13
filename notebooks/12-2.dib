@@ -237,54 +237,58 @@ seq {for {statuses = statuses} in parse test -> runLengthEncode statuses}
 
 #!fsharp
 
-let countArangements memo { statuses = statuses; damagedGroupLengths = lengths } =
+type Cache = System.Collections.Generic.Dictionary<(int seq*((Status*int) seq)),int64>
+
+module Cache =
+  let empty: Cache = System.Collections.Generic.Dictionary<_,_>()
+  let add key value (cache: Cache) =
+    cache.Add(key, value)
+    value
+
+  let tryFind key (cache: Cache) =
+    match cache.TryGetValue(key) with
+    | true, value -> Some value
+    | _ -> None
+
+#!fsharp
+
+let countArangements (cache: Cache) { statuses = statuses; damagedGroupLengths = lengths } =
   let addUnknown n =
     function
     | (Unknown, n')::rest -> (Unknown, n' + n)::rest
     | statuses when n > 0 -> (Unknown, n)::statuses
     | statuses -> statuses
 
-  let rec loop memo lengths statuses =
-    let zero = 0, memo
-    let one = 1, memo
-
-    match lengths, statuses with
-    | lengths, (Damaged, dl)::(Damaged, dl')::rest -> (Damaged, dl + dl')::rest |> memoize memo lengths 
-    | _, (Operational, _)::rest -> memoize memo lengths rest
-    | dl::lengths, (Damaged, dl')::(Unknown, ul)::statuses when dl = dl' -> statuses |> addUnknown (ul - 1) |> memoize memo lengths 
-    | dl::lengths, (Damaged, dl')::statuses when dl = dl' -> memoize memo lengths statuses
-    | (dl::_), (Damaged, dl')::(Unknown, ul)::_ when dl' > dl -> zero
-    | (dl::_) as lengths, (Damaged, dl')::(Unknown, ul)::statuses ->
-      let missing = min (dl - dl') ul
-      (Damaged, dl' + missing)::(addUnknown (ul - missing) statuses) |> memoize memo lengths
-    | lengths, (Unknown, ul)::rest ->
-      let rest = addUnknown (ul - 1) rest
-      let fold (count, memo) status =
-        let count', memo' = memoize memo lengths (status::rest)
-        count + count', merge memo memo'
-      List.fold fold zero [Operational, 1; Damaged, 1]
-    | [], [] -> one
-    | _ -> zero
-  and memoize memo lengths statuses =
-    match Map.tryFind (lengths, statuses) memo with
-    | Some count -> count, memo
+  let rec loop lengths statuses =
+    match Cache.tryFind (lengths, statuses) cache with
+    | Some count -> count
     | None ->
-      let count, memo = loop memo lengths statuses
-      count, Map.add (lengths, statuses) count memo
+      let count = 
+        match lengths, statuses with
+        | lengths, (Damaged, dl)::(Damaged, dl')::rest -> (Damaged, dl + dl')::rest |> loop lengths 
+        | _, (Operational, _)::rest -> loop lengths rest
+        | dl::lengths, (Damaged, dl')::(Unknown, ul)::statuses when dl = dl' -> statuses |> addUnknown (ul - 1) |> loop lengths 
+        | dl::lengths, (Damaged, dl')::statuses when dl = dl' -> loop lengths statuses
+        | (dl::_), (Damaged, dl')::(Unknown, ul)::_ when dl' > dl -> 0L
+        | (dl::_) as lengths, (Damaged, dl')::(Unknown, ul)::statuses ->
+          let missing = min (dl - dl') ul
+          (Damaged, dl' + missing)::(addUnknown (ul - missing) statuses) |> loop lengths
+        | lengths, (Unknown, ul)::rest ->
+          let rest = addUnknown (ul - 1) rest
+          let fold count status = count + loop lengths (status::rest)
+          List.fold fold 0L [Operational, 1; Damaged, 1]
+        | [], [] -> 1L
+        | _ -> 0L
+      Cache.add (lengths, statuses) count cache
 
-  statuses |> runLengthEncode |> List.ofSeq |> loop memo (List.ofSeq lengths)
+  statuses |> runLengthEncode |> List.ofSeq |> loop (List.ofSeq lengths)
 
 #!fsharp
 
 #!share test --from value
 
 let solve = 
-  let fold (count, memo) record =
-    printfn "%d" count
-    let (count', memo') = countArangements memo record
-    count + count', merge memo memo'
-
-  parse >> Seq.fold fold (0, Map.empty) >> fst
+  parse >> Seq.map (countArangements Cache.empty) >> Seq.sum
 
 solve test
 // 525152
