@@ -123,8 +123,6 @@ let distributions groups total =
 //   yield distributions groups total
 //   yield distribute groups total ] |> List.iter (List.sort >> printfn "%A")
 
-distributions 16 35 |> Seq.take 100_000_000 |> Seq.length
-
 #!markdown
 
 Ok thats way too many permutations even once we get the function to be fast.
@@ -210,3 +208,57 @@ let permute ({ statuses = statuses; damagedGroupLengths = damagedGroupLengths } 
 #!share test --from value
 test |> parse |> Seq.skip(1) |> Seq.head |> permute 
 // test |> solve
+
+#!markdown
+
+Time to look for help. Gonna basically implement [this](https://github.com/bjorng/advent-of-code-2023/blob/main/day12/lib/day12.ex).
+
+#!fsharp
+
+let runLengthEncode : Status seq -> (Status*int) seq = 
+  let fold encoded status =
+    match encoded with
+    | [] -> [status, 1]
+    | (status', count)::rest when status = status' -> (status, count + 1)::rest
+    | _ -> (status, 1)::encoded
+  Seq.fold fold [] >> Seq.rev
+
+#!fsharp
+
+#!share test --from value
+
+seq {for {statuses = statuses} in parse test -> runLengthEncode statuses}
+
+#!fsharp
+
+let countArangements { statuses = statuses; damagedGroupLengths = lengths } =
+  let addUnknown n =
+    function
+    | (Unknown, n')::rest -> (Unknown, n' + n)::rest
+    | statuses when n > 0 -> (Unknown, n)::statuses
+    | statuses -> statuses
+
+  let rec loop (lengths: int list) statuses =
+    match lengths, statuses with
+    | lengths, (Damaged, dl)::(Damaged, dl')::rest -> (Damaged, dl + dl')::rest |> loop lengths 
+    | _, (Operational, _)::rest -> loop lengths rest
+    | dl::lengths, (Damaged, dl')::(Unknown, ul)::statuses when dl = dl' -> statuses |> addUnknown (ul - 1) |> loop lengths 
+    | dl::lengths, (Damaged, dl')::statuses when dl = dl' -> loop lengths statuses
+    | (dl::_) as lengths, (Damaged, dl')::(Unknown, ul)::statuses when min (dl - dl') ul < 0 -> 0
+    | (dl::_) as lengths, (Damaged, dl')::(Unknown, ul)::statuses ->
+      let missing = min (dl - dl') ul
+      (Damaged, dl' + missing)::(addUnknown (ul - missing) statuses) |> loop lengths
+    | lengths, (Unknown, ul)::rest ->
+      let rest = addUnknown (ul - 1) rest
+      let fold acc status = status::rest |> loop lengths |> ((+) acc)
+      List.fold fold 0 [Operational, 1; Damaged, 1]
+    | [], [] -> 1
+    | _ -> 0
+
+  statuses |> runLengthEncode |> List.ofSeq |> loop (List.ofSeq lengths)
+
+#!fsharp
+
+#!share test --from value
+test |> parse |> Seq.map countArangements |> Seq.sum
+// 525152
