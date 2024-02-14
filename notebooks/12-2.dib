@@ -237,10 +237,11 @@ seq {for {statuses = statuses} in parse test -> runLengthEncode statuses}
 
 #!fsharp
 
-type Cache = System.Collections.Generic.Dictionary<(int seq*((Status*int) seq)),int64>
+type Key = int list*((Status*int) list)
+type Cache = System.Collections.Generic.Dictionary<Key,int64>
 
 module Cache =
-  let empty: Cache = System.Collections.Generic.Dictionary<_,_>()
+  let empty: unit -> Cache = System.Collections.Generic.Dictionary<_,_>
   let add key value (cache: Cache) =
     cache.Add(key, value)
     value
@@ -260,26 +261,26 @@ let countArangements (cache: Cache) { statuses = statuses; damagedGroupLengths =
     | statuses -> statuses
 
   let rec loop lengths statuses =
-    match Cache.tryFind (lengths, statuses) cache with
+    let key = lengths, statuses
+    match Cache.tryFind key cache with
     | Some count -> count
-    | None ->
-      let count = 
-        match lengths, statuses with
-        | lengths, (Damaged, dl)::(Damaged, dl')::rest -> (Damaged, dl + dl')::rest |> loop lengths 
-        | _, (Operational, _)::rest -> loop lengths rest
-        | dl::lengths, (Damaged, dl')::(Unknown, ul)::statuses when dl = dl' -> statuses |> addUnknown (ul - 1) |> loop lengths 
-        | dl::lengths, (Damaged, dl')::statuses when dl = dl' -> loop lengths statuses
-        | (dl::_), (Damaged, dl')::(Unknown, ul)::_ when dl' > dl -> 0L
-        | (dl::_) as lengths, (Damaged, dl')::(Unknown, ul)::statuses ->
-          let missing = min (dl - dl') ul
-          (Damaged, dl' + missing)::(addUnknown (ul - missing) statuses) |> loop lengths
-        | lengths, (Unknown, ul)::rest ->
-          let rest = addUnknown (ul - 1) rest
-          let fold count status = count + loop lengths (status::rest)
-          List.fold fold 0L [Operational, 1; Damaged, 1]
-        | [], [] -> 1L
-        | _ -> 0L
-      Cache.add (lengths, statuses) count cache
+    | None -> Cache.add key (count key) cache
+  and count =
+    function
+    | lengths, (Damaged, dl)::(Damaged, dl')::rest -> (Damaged, dl + dl')::rest |> loop lengths 
+    | lengths, (Operational, _)::rest -> loop lengths rest
+    | dl::lengths, (Damaged, dl')::(Unknown, ul)::statuses when dl = dl' -> statuses |> addUnknown (ul - 1) |> loop lengths 
+    | dl::lengths, (Damaged, dl')::statuses when dl = dl' -> loop lengths statuses
+    | (dl::_), (Damaged, dl')::(Unknown, ul)::_ when dl' > dl -> 0L
+    | (dl::_) as lengths, (Damaged, dl')::(Unknown, ul)::statuses ->
+      let missing = min (dl - dl') ul
+      (Damaged, dl' + missing)::(addUnknown (ul - missing) statuses) |> loop lengths
+    | lengths, (Unknown, ul)::rest ->
+      let rest = addUnknown (ul - 1) rest
+      let fold count status = count + loop lengths (status::rest)
+      List.fold fold 0L [Operational, 1; Damaged, 1]
+    | [], [] -> 1L
+    | _ -> 0L
 
   statuses |> runLengthEncode |> List.ofSeq |> loop (List.ofSeq lengths)
 
@@ -288,7 +289,7 @@ let countArangements (cache: Cache) { statuses = statuses; damagedGroupLengths =
 #!share test --from value
 
 let solve = 
-  parse >> Seq.map (countArangements Cache.empty) >> Seq.sum
+  parse >> Seq.map (() |> Cache.empty |> countArangements) >> Seq.sum
 
 solve test
 // 525152

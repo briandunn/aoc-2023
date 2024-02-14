@@ -26,11 +26,18 @@ lsr: lhk
 rzs: qnr cmg lsr rsh
 frs: qnr lhk lsr
 
+#!csharp
+
+#r "nuget: Microsoft.DotNet.Interactive.Extensionlab, 1.0.0-beta.24101.2"
+
+#!fsharp
+
+#load "Aoc.fsx"
+open Aoc
+
 #!fsharp
 
 #!share testInput --from value
-
-#!fsharp
 
 let parse (input: string) = 
   seq {
@@ -103,13 +110,9 @@ module Neighbors =
 
 let toDot edges =
   let nodes = String.concat "\n" <| seq { for a,b in edges -> sprintf "%s -- %s;" a b }
-  sprintf "graph {\n%s\n}\n" nodes
+  nodes |> sprintf "graph {\n%s\n}\n" |> Aoc.dot |> HTML
 
-testInput |> parse |> edges |> toDot
-
-#!html
-
-<img src="../25-testInput.svg" />
+testInput |> parse |> edges |> toDot 
 
 #!markdown
 
@@ -120,11 +123,6 @@ So maybe:
 Find the shortest cycle for each edge. If there are three with the longest cycles... we win?
 
 Ok so how do we find the shortest cycles for each edge. Could do Dikestra, but allow returning to the starting node. As soon as we do boom. Would have to do it from every node.
-
-#!fsharp
-
-#load "Aoc.fsx"
-open Aoc
 
 #!fsharp
 
@@ -250,13 +248,9 @@ testInput |> parse |> edges |> cluster
 What if it's not tightest loop, it's like, interconnectedness. the cluster on the left - every node is connected to three other nodes in the cluster. How many steps does it take to get to a new node?
 Or of my neighbors, how many are neighbors? if any of my neighbors are neighbors, they're in my cluster.
 
-#!html
-
-<img src="../25-testInput.svg" />
-
 #!markdown
 
-*boom* ok that looks promising. Let's sketch out a solve.
+_boom_ ok that looks promising. Let's sketch out a solve.
 
 #!fsharp
 
@@ -307,8 +301,9 @@ Ok so my clustering attempts failed. Wind up with 166 nodes that have equal conn
 #!fsharp
 
 module Karger =
+  let random = System.Random()
+
   let randomEdge (edges: 'a seq) =
-    let random = System.Random()
     let index = random.Next(max (Seq.length edges - 1) 0)
     edges |> Seq.item index
 
@@ -331,7 +326,7 @@ module Karger =
       if i = 2 then edges
       else edges |> contract (edges |> randomEdge |> snd) |> loop (i - 1)
 
-    let indexed = Seq.indexed edges |> List.ofSeq
+    let indexed = edges |> Seq.indexed |> List.ofSeq
     let cutIndexes = indexed |> loop (nodeCount edges) |> Seq.map fst |> Set.ofSeq
     indexed |> Seq.filter (fun (i, _) -> Set.contains i cutIndexes) |> Seq.map snd
 
@@ -339,7 +334,7 @@ module Karger =
     let rec loop edges =
       let solution = reduce edges
       let cutCount = Seq.length solution
-      printfn "cut count: %d" cutCount
+      // printfn "cut count: %d" cutCount
       if cutCount = n then solution
       else loop edges
     loop edges
@@ -377,6 +372,20 @@ input |> parse |> edges |> toDot
 
 #!fsharp
 
+let combinationCount (k: int) (n: int) =
+  let rec factorial =
+    function
+    | 0L -> 1L
+    | n -> n * factorial n - 1L
+
+  factorial n / (factorial k * factorial (int64 (n - k)))
+
+
+
+// input |> parse |> edges |> Set.count |> combinationCount 3
+
+#!fsharp
+
 let solve1 input =
   let edges = input |> parse |> edges
 
@@ -395,210 +404,6 @@ let solve1 input =
 // 426800 too low
 // 437936 wrong answer
 
+
+
 solve1 input
-
-#!fsharp
-
-[
-  (("qfj", "tbq"), 9)
-  (("xmh", "xqt"), 7)
-  (("xgz", "xkg"), 7)
-  (("xcd", "xsh"), 7)
-  (("vkv", "xtr"), 7)
-  (("vkv", "xbl"), 7)
-  (("tkp", "zxl"), 7)
-  (("tkp", "xbb"), 7)
-  (("tjj", "xtj"), 7)
-  (("stj", "vsv"), 7)
-  (("spx", "zvl"), 7)
-  (("spx", "vsq"), 7)
-  (("spx", "vgz"), 7)
-  (("sgj", "spk"), 7)
-  (("rxt", "xsm"), 7)
-  (("rsd", "vgz"), 7)
-  (("rqz", "ztd"), 7)
-  (("rqz", "rxh"), 7)
-  (("rbz", "xbp"), 7)
-  (("rbz", "vgj"), 7)
-  (("qrv", "vhx"), 7)
-  (("qqq", "tnh"), 7)
-  (("qqh", "xbl"), 7)
-  (("qjr", "vld"), 7)
-  (("pns", "xsm"), 7)
-  (("pgt", "xvp"), 7)
-  (("pdt", "vfb"), 7)
-  (("pcl", "qnr"), 7)
-  (("nvs", "vjp"), 7)
-  (("njd", "nmm"), 7)
-  (("ndz", "pnh"), 7)
-  (("ndr", "tqr"), 7)
-  (("ncx", "tnh"), 7)
-  (("mxt", "nst"), 7)
-  (("mvt", "sdt"), 7)
-  (("mtn", "qrq"), 7)
-  (("mtn", "phd"), 7)
-  (("mth", "tpz"), 7)
-  (("mtf", "qcj"), 7)
-  (("msx", "rqz"), 7)
-  (("mnk", "sgv"), 7)
-  (("mnk", "rcc"), 7)
-  (("mml", "scv"), 7)
-  (("mlg", "qzz"), 7)
-  (("mkh", "xbb"), 7)
-  (("mjm", "rbz"), 7)
-  (("mjj", "mvn"), 7)
-  (("mfg", "ttl"), 7)
-  (("mcb", "xjp"), 7)
-  (("lzz", "tnn"), 7)
-  (("lzz", "tgm"), 7)
-  (("ltx", "nvz"), 7)
-  (("ltn", "nfr"), 7)
-  (("ltb", "qvh"), 7)
-  (("lss", "pts"), 7)
-  (("lsc", "pmk"), 7)
-  (("lrp", "vfb"), 7)
-  (("lql", "xfp"), 7)
-  (("lnh", "zvl"), 7)
-  (("lkl", "vbd"), 7)
-  (("lhz", "pjd"), 7)
-  (("lfh", "rzv"), 7)
-  (("ldz", "pmm"), 7)
-  (("lbn", "qrp"), 7)
-  (("kzf", "mpz"), 7)
-  (("ksn", "vkk"), 7)
-  (("ksc", "tkk"), 7)
-  (("knc", "prl"), 7)
-  (("kld", "ntc"), 7)
-  (("kkq", "zsx"), 7)
-  (("kkq", "srs"), 7)
-  (("khj", "tgc"), 7)
-  (("khg", "xms"), 7)
-  (("kfx", "nmm"), 7)
-  (("kdd", "rsz"), 7)
-  (("kct", "ntc"), 7)
-  (("jzz", "mbc"), 7)
-  (("jvd", "rqz"), 7)
-  (("jpl", "srs"), 7)
-  (("jpl", "shr"), 7)
-  (("jmr", "xct"), 7)
-  (("jmr", "nzz"), 7)
-  (("jkk", "zjx"), 7)
-  (("jkj", "rbz"), 7)
-  (("jgp", "rxt"), 7)
-  (("jgp", "qjd"), 7)
-  (("jgp", "pgt"), 7)
-  (("jgp", "mcr"), 7)
-  (("jdj", "mtn"), 7)
-  (("jcq", "phg"), 7)
-  (("jbh", "qsc"), 7)
-  (("hxx", "mjm"), 7)
-  (("htq", "xcq"), 7)
-  (("htq", "rkq"), 7)
-  (("hsm", "pjd"), 7)
-  (("hsg", "njd"), 7)
-  (("hpp", "lpk"), 7)
-  (("hpp", "hsm"), 7)
-  (("hnb", "mvq"), 7)
-  (("hlb", "jpj"), 7)
-  (("hbl", "vkv"), 7)
-  (("hbd", "vrl"), 7)
-  (("gzv", "jnq"), 7)
-  (("gzk", "mbc"), 7)
-  (("gxt", "jqk"), 7)
-  (("gvt", "sxs"), 7)
-  (("grs", "nrp"), 7)
-  (("grq", "xzb"), 7)
-  (("grq", "spx"), 7)
-  (("grj", "msx"), 7)
-  (("grj", "jfp"), 7)
-  (("gqx", "mcx"), 7)
-  (("gnh", "trs"), 7)
-  (("gjr", "xqb"), 7)
-  (("ght", "grr"), 7)
-  (("ghb", "xvk"), 7)
-  (("ggz", "mms"), 7)
-  (("ggp", "zjx"), 7)
-  (("ggp", "xzn"), 7)
-  (("gff", "svr"), 7)
-  (("gfb", "hxd"), 7)
-  (("gbn", "vkl"), 7)
-  (("fxj", "xcq"), 7)
-  (("fxj", "mjf"), 7)
-  (("fxb", "rxz"), 7)
-  (("ftp", "zjs"), 7)
-  (("fsz", "gzx"), 7)
-  (("fnx", "tjb"), 7)
-  (("fmj", "tjj"), 7)
-  (("fmj", "tbj"), 7)
-  (("fmj", "mzl"), 7)
-  (("fmj", "hrh"), 7)
-  (("fmd", "lsp"), 7)
-  (("fkd", "xsh"), 7)
-  (("fjs", "gnh"), 7)
-  (("fgp", "vsv"), 7)
-  (("dxd", "lrp"), 7)
-  (("dsx", "htj"), 7)
-  (("dsr", "xzn"), 7)
-  (("drs", "tlz"), 7)
-  (("drn", "qsc"), 7)
-  (("dlr", "xkm"), 7)
-  (("dgk", "nlv"), 7)
-  (("dcc", "gms"), 7)
-  (("czr", "pjd"), 7)
-  (("czr", "lhr"), 7)
-  (("cpb", "lxs"), 7)
-  (("cnl", "xqb"), 7)
-  (("cnj", "lhz"), 7)
-  (("clf", "xfp"), 7)
-  (("chd", "nzd"), 7)
-  (("cgn", "rkq"), 7)
-  (("cgk", "flr"), 7)
-  (("cfr", "mml"), 7)
-  (("cfr", "gzk"), 7)
-  (("cbq", "cnj"), 7)
-  (("cbl", "xzn"), 7)
-  (("cbl", "hfh"), 7)
-  (("bzn", "zcp"), 7)
-  (("bzn", "ghx"), 7)
-  (("bxb", "xzn"), 7)
-  (("bvb", "xpn"), 7)
-  (("bvb", "jxn"), 7)
-  (("bvb", "jnq"), 7)
-  (("bvb", "ftv"), 7)
-  (("btm", "kbq"), 7)
-  (("btm", "dnz"), 7)
-  (("brs", "rsz"), 7)
-  (("brr", "zjx"), 7)
-  (("brm", "zjs"), 7)
-  (("bqc", "mvq"), 7)
-  (("bnr", "mzl"), 7)
-  (("bng", "ltx"), 7)
-  (("bnf", "rgq"), 7)
-  (("bmb", "cgn"), 7)
-  (("bls", "kqs"), 7)
-  (("bls", "jcq"), 7)
-  (("blf", "hbd"), 7)
-  (("bdp", "gjh"), 7)
-  (("bcv", "zmp"), 7)
-  (("bcq", "bdp"), 7)
-  (("bbz", "mbt"), 7)
-  (("bbq", "rmk"), 7)
-  (("bbq", "nzz"), 7)] |> Seq.map fst |> Set.ofSeq |> nodes |> Set.intersect (input |> parse |> edges |> nodes)
-
-  
-
-#!fsharp
-
-broken |> components |> Seq.map (nodes >> Seq.length) |> Seq.reduce (*)
-
-// so this one actually made two groups. but it looks like it also removed some nodes from the graph. tightest loop might not be the right thing to measure.
-
-// 547638 too low
-
-#!markdown
-
-I had thoughts!
-
-Weights is overkill. Since edges have no cost and we're just counting them, to get the shortest loop we just fan out until we hit the other end. When we do that's the tightest loop.
-
-We should be able to find _all_ loops through a given node by traversing each edge once. Then we could remove that node, go on to another, and find all loops through it?
